@@ -3,6 +3,7 @@
 #include <mutex>
 #include <thread>
 
+#include "pipeline.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
@@ -13,16 +14,15 @@
 class SensorSubscriber : public rclcpp::Node {
 
   public:
-    SensorSubscriber(std::shared_ptr<isae::ADataProvider> prov) : Node("sensor_subscriber"), _prov(prov) {
+    SensorSubscriber(std::shared_ptr<isae::ADataProvider> prov, std::shared_ptr<Pipeline> pipe)
+        : Node("sensor_subscriber"), _prov(prov), _pipe(pipe) {
 
         _subscription_left = this->create_subscription<sensor_msgs::msg::Image>(
             _prov->getCamConfigs().at(0)->ros_topic,
             10,
             std::bind(&SensorSubscriber::subLeftImage, this, std::placeholders::_1));
         _subscription_ubx = this->create_subscription<ublox_msgs::msg::NavPVT>(
-            "/ublox_gps_node/navpvt",
-            10,
-            std::bind(&SensorSubscriber::subUbx, this, std::placeholders::_1));
+            "/ublox_gps_node/navpvt", 10, std::bind(&SensorSubscriber::subUbx, this, std::placeholders::_1));
         if (_prov->getNCam() == 2)
             _subscription_right = this->create_subscription<sensor_msgs::msg::Image>(
                 _prov->getCamConfigs().at(1)->ros_topic,
@@ -40,9 +40,12 @@ class SensorSubscriber : public rclcpp::Node {
         _imgs_bufl.push(img_msg);
     }
 
-    void subUbx(const ublox_msgs::msg::NavPVT &img_ubx) {
-        std::cout << "Latitude : " << img_ubx.lat << std::endl;
-        std::cout << "Longitude : " << img_ubx.lon << std::endl;
+    void subUbx(const ublox_msgs::msg::NavPVT &msg_ubx) {
+        _pipe->_nav_frames.push_back(std::make_shared<NavFrame>(
+            Eigen::Vector3d((double)msg_ubx.lat, (double)msg_ubx.lon, (double)msg_ubx.height), 1));
+        std::cout << "N frames = " << _pipe->_nav_frames.size() << std::endl;
+        std::cout << "Cur position = "
+                  << Eigen::Vector3d((double)msg_ubx.lat, (double)msg_ubx.lon, (double)msg_ubx.height) << std::endl;
     }
 
     void subRightImage(const sensor_msgs::msg::Image &img_msg) {
@@ -187,6 +190,7 @@ class SensorSubscriber : public rclcpp::Node {
     }
 
     std::shared_ptr<isae::ADataProvider> _prov;
+    std::shared_ptr<Pipeline> _pipe;
 
     std::queue<sensor_msgs::msg::Image> _imgs_bufl, _imgs_bufr;
     std::queue<sensor_msgs::msg::Imu> _imu_buf;

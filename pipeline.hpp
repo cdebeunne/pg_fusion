@@ -2,13 +2,13 @@
 #define PIPELINE_H
 
 #include <Eigen/Dense>
-#include <poseGraph.hpp>
+#include "navframe.hpp"
 
 class Pipeline {
   public:
     Pipeline(){};
 
-    std::shared_ptr<PoseGraph> pg;
+    std::vector<std::shared_ptr<NavFrame>> _nav_frames;
 };
 
 #endif // PIPELINE_H
