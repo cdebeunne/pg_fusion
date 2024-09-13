@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/opt/ros/galactic/include/**",
+                "/usr/local/include/**",
+                "/usr/include/opencv4/**",
+                "/usr/include/pcl-1.10/pcl/**",
+                "/usr/include/pcl-1.10",
+                "/home/deos/ce.debeunne/colcon_ws/src/SaDVIO/cpp/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
