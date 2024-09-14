@@ -56,7 +56,7 @@ include_directories(
 # -------------------------------------------------------------------
 
 add_library(${PROJECT_NAME} SHARED poseGraph.hpp pipeline.hpp)
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${CERES_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${ISAE_SLAM_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${CERES_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${ISAE_SLAM_LIBRARIES} "/usr/local/lib/isae_slam/libisae_slam.so")
 
 install(
   TARGETS ${PROJECT_NAME}
