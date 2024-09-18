@@ -3,6 +3,13 @@
 
 #include <Eigen/Dense>
 #include "navframe.hpp"
+#include <queue>
+#include <memory>
+#include <iostream>
+#include <cmath>
+#include <thread>
+
+double deg2rad = M_PI / 180;
 
 class Pipeline {
   public:
@@ -19,10 +26,17 @@ class Pipeline {
     const Eigen::Vector3d llhToEcef(const Eigen::Vector3d &llh);
     const Eigen::Vector3d ecefToENU(const Eigen::Vector3d &ecef);
 
+    std::shared_ptr<NavFrame> next();
+    void run();
+    void init();
+    void step();
+
     double _a, _f, _e2; // Ellipsoid parameters for Earth coordinates
     Eigen::Matrix3d _R_n_e;
     Eigen::Vector3d _llh_ref, _ecef_ref;
+    std::queue<std::shared_ptr<NavFrame>> _nf_queue;
     std::vector<std::shared_ptr<NavFrame>> _nav_frames;
+    std::shared_ptr<NavFrame> _nf;
 };
 
 #endif // PIPELINE_H

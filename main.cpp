@@ -1,11 +1,11 @@
 #include "isaeslam/slamParameters.h"
-#include "pipeline.hpp"
 #include "sensorSubscriber.h"
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <iostream>
-#include <rclcpp/rclcpp.hpp>
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
   rclcpp::init(argc, argv);
 
   // Create the SLAM parameter object
@@ -15,11 +15,13 @@ int main(int argc, char **argv) {
   // Create pipeline
   std::shared_ptr<Pipeline> pipe = std::make_shared<Pipeline>();
 
-  std::cout << slam_param._config.slam_mode << std::endl;
-
   // Start the sensor subscriber
   std::shared_ptr<SensorSubscriber> sensor_subscriber =
       std::make_shared<SensorSubscriber>(slam_param.getDataProvider(), pipe);
+
+  // Launch full odom thread
+  std::thread pg_thread(&Pipeline::run, pipe);
+  pg_thread.detach();
 
   rclcpp::spin(sensor_subscriber);
 

@@ -41,8 +41,9 @@ class SensorSubscriber : public rclcpp::Node {
     }
 
     void subUbx(const ublox_msgs::msg::NavPVT &msg_ubx) {
-        _pipe->_nav_frames.push_back(std::make_shared<NavFrame>(
-            Eigen::Vector3d((double)msg_ubx.lat, (double)msg_ubx.lon, (double)msg_ubx.height), 1));
+        // Compliant with ubx message in deg/1e-7 and mm
+        _pipe->_nf_queue.push(std::make_shared<NavFrame>(
+            Eigen::Vector3d((double)msg_ubx.lat * 1e-7, (double)msg_ubx.lon * 1e-7, (double)msg_ubx.height) * 1e-3, 1));
         std::cout << "N frames = " << _pipe->_nav_frames.size() << std::endl;
         std::cout << "Cur position = "
                   << Eigen::Vector3d((double)msg_ubx.lat, (double)msg_ubx.lon, (double)msg_ubx.height) << std::endl;
