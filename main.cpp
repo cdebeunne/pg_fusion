@@ -1,5 +1,6 @@
 #include "isaeslam/slamParameters.h"
 #include "sensorSubscriber.h"
+#include "rosVisualizer.hpp"
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <iostream>
@@ -22,6 +23,11 @@ int main(int argc, char **argv)
   // Launch full odom thread
   std::thread pg_thread(&Pipeline::run, pipe);
   pg_thread.detach();
+
+  // Launch visualizer thread
+  std::shared_ptr<RosVisualizer> rv = std::make_shared<RosVisualizer>(); 
+  std::thread rv_thread(&RosVisualizer::runVisualizer, rv, pipe);
+  rv_thread.detach();
 
   rclcpp::spin(sensor_subscriber);
 

@@ -35,7 +35,6 @@ void Pipeline::setRef(const Eigen::Vector3d &llh_ref) {
     _R_n_e(2,0) = std::cos(_llh_ref.x() * deg2rad)*std::cos(_llh_ref.y() * deg2rad);
     _R_n_e(2,1) = std::cos(_llh_ref.x() * deg2rad)*std::sin(_llh_ref.y() * deg2rad);
     _R_n_e(2,2) = std::sin(_llh_ref.x() * deg2rad);
-    std::cout << _R_n_e << std::endl;
 }
 
 std::shared_ptr<NavFrame> Pipeline::next() {
@@ -75,7 +74,9 @@ void Pipeline::step() {
     Eigen::Affine3d T_n_f = Eigen::Affine3d::Identity();
     T_n_f.translation() = t_n_f;
 
-    std::cout << "New Frame : " << t_n_f << std::endl;
+    // Set pose
+    _nf->_T_n_f = T_n_f;
+
     // Add to the nav frame vector
     _nav_frames.push_back(_nf);
 }
