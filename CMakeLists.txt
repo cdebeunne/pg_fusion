@@ -87,4 +87,7 @@ target_link_libraries(pg_main ${PROJECT_NAME})
 install(TARGETS pg_main
   DESTINATION lib/${PROJECT_NAME})
 
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME})
+
 ament_package()

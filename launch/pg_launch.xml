@@ -1,0 +1,10 @@
+<launch>
+
+    <!-- Visualization - RViz-->
+    <let name="rviz_config" value="$(find-pkg-share pg_fusion)/launch/pg_config.rviz"/>
+    <node name="rviz" pkg="rviz2" exec="rviz2" args="-d $(var rviz_config)" />
+    
+    <!-- SLAM node -->
+    <node name="pg_main" pkg="pg_fusion" exec="pg_main" output="screen" />
+
+</launch>
