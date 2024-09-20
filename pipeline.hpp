@@ -3,6 +3,7 @@
 
 #include <Eigen/Dense>
 #include "navframe.hpp"
+#include "isaeslam/slamCore.h"
 #include <queue>
 #include <memory>
 #include <iostream>
@@ -13,7 +14,7 @@ double deg2rad = M_PI / 180;
 
 class Pipeline {
   public:
-    Pipeline(){
+    Pipeline(std::shared_ptr<isae::SLAMCore> slam): _slam(slam){
 
       // Ellipsoid parameters of the WGS84 convention
       _a = 6378137.0f;
@@ -30,6 +31,8 @@ class Pipeline {
     void run();
     void init();
     void step();
+
+    std::shared_ptr<isae::SLAMCore> _slam; // VSLAM
 
     double _a, _f, _e2; // Ellipsoid parameters for Earth coordinates
     Eigen::Matrix3d _R_n_e;

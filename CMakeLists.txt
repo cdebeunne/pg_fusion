@@ -39,6 +39,7 @@ find_package(yaml-cpp REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(PCL REQUIRED)
 find_package(isae_slam CONFIG REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system)
 
@@ -68,7 +69,7 @@ set(HEADERS
 )
 add_library(${PROJECT_NAME} SHARED ${SOURCE} ${HEADERS})
 message(STATUS ${ISAE_SLAM_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${CERES_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${ISAE_SLAM_LIBRARIES} /home/cesar/ros2_ws/src/SaDVIO/cpp/build/libisae_slam.so)
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${PCL_LIBRARIES} ${CERES_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${ISAE_SLAM_LIBRARIES} /home/cesar/ros2_ws/src/SaDVIO/cpp/build/libisae_slam.so)
 
 install(
   TARGETS ${PROJECT_NAME}
