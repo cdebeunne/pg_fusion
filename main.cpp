@@ -1,6 +1,7 @@
 #include "isaeslam/slamParameters.h"
 #include "sensorSubscriber.h"
 #include "rosVisualizer.hpp"
+#include <yaml-cpp/yaml.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <iostream>
@@ -9,8 +10,11 @@ int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
 
+  // load config file
+  YAML::Node config = YAML::LoadFile(ament_index_cpp::get_package_share_directory("pg_fusion") + "/config.yaml");
+
   // Create the SLAM parameter object
-  std::string path = "/home/deos/ce.debeunne/colcon_ws/src/SaDVIO/ros/config";
+  std::string path = config["slam_config_path"].as<std::string>();
   std::shared_ptr<isae::SLAMParameters> slam_param =
         std::make_shared<isae::SLAMParameters>(path);
 
@@ -32,7 +36,7 @@ int main(int argc, char **argv)
 
   // Start the sensor subscriber
   std::shared_ptr<SensorSubscriber> sensor_subscriber =
-      std::make_shared<SensorSubscriber>(slam_param->getDataProvider(), pipe);
+      std::make_shared<SensorSubscriber>(slam_param->getDataProvider(), pipe, "bite");
 
   // Launch full odom thread
   std::thread pg_thread(&Pipeline::run, pipe);

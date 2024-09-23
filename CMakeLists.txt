@@ -69,7 +69,7 @@ set(HEADERS
 )
 add_library(${PROJECT_NAME} SHARED ${SOURCE} ${HEADERS})
 message(STATUS ${ISAE_SLAM_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${PCL_LIBRARIES} ${CERES_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${ISAE_SLAM_LIBRARIES} /home/cesar/ros2_ws/src/SaDVIO/cpp/build/libisae_slam.so)
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${YAML_CPP_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES} ${Boost_SYSTEM_LIBRARY} ${ISAE_SLAM_LIBRARIES} /home/cesar/ros2_ws/src/SaDVIO/cpp/build/libisae_slam.so)
 
 install(
   TARGETS ${PROJECT_NAME}
@@ -89,6 +89,9 @@ install(TARGETS pg_main
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME})
+
+  install(FILES config.yaml
   DESTINATION share/${PROJECT_NAME})
 
 ament_package()

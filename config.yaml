@@ -1,0 +1,2 @@
+slam_config_path: "/home/cesar/ros2_ws/src/SaDVIO/ros/config"
+gnss_topic: "ublox_node/fix"
