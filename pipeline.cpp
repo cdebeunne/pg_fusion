@@ -55,7 +55,7 @@ void Pipeline::init() {
     _nf = next();
 
     // Set the current frame as the reference frame
-    setRef(_nf->_llh_meas);
+    setRef(_nf->_gnss_meas.llh_meas);
     Eigen::Affine3d T_n_f = Eigen::Affine3d::Identity();
     _nf->_T_n_f = T_n_f;
 
@@ -70,7 +70,7 @@ void Pipeline::step() {
     _nf = next();
 
     // Compute position in the local frame
-    Eigen::Vector3d t_n_f = ecefToENU(llhToEcef(_nf->_llh_meas));
+    Eigen::Vector3d t_n_f = ecefToENU(llhToEcef(_nf->_gnss_meas.llh_meas));
     Eigen::Affine3d T_n_f = Eigen::Affine3d::Identity();
     T_n_f.translation() = t_n_f;
 

@@ -8,6 +8,7 @@
 #include "sensor_msgs/msg/compressed_image.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "sensor_msgs/msg/nav_sat_fix.hpp"
 #include "ublox_msgs/msg/nav_pvt.hpp"
 #include <cv_bridge/cv_bridge.h>
 
@@ -21,8 +22,8 @@ class SensorSubscriber : public rclcpp::Node {
             _prov->getCamConfigs().at(0)->ros_topic,
             10,
             std::bind(&SensorSubscriber::subLeftImage, this, std::placeholders::_1));
-        _subscription_ubx = this->create_subscription<ublox_msgs::msg::NavPVT>(
-            "/ublox_gps_node/navpvt", 10, std::bind(&SensorSubscriber::subUbx, this, std::placeholders::_1));
+        _subscription_ubx = this->create_subscription<sensor_msgs::msg::NavSatFix>(
+            "/ublox_gps_node/fix", 10, std::bind(&SensorSubscriber::subUbx, this, std::placeholders::_1));
         if (_prov->getNCam() == 2)
             _subscription_right = this->create_subscription<sensor_msgs::msg::Image>(
                 _prov->getCamConfigs().at(1)->ros_topic,
@@ -40,12 +41,21 @@ class SensorSubscriber : public rclcpp::Node {
         _imgs_bufl.push(img_msg);
     }
 
-    void subUbx(const ublox_msgs::msg::NavPVT &msg_ubx) {
-        // Compliant with ubx message in deg/1e-7 and mm
-        rclcpp::Time ts = rclcpp::Clock{RCL_ROS_TIME}.now();
+    void subUbx(const sensor_msgs::msg::NavSatFix &gnss_msg) {
+        // Extract ts from msg
+        rclcpp::Time ts            = gnss_msg.header.stamp;
         unsigned long long ts_long = (unsigned long long)ts.nanoseconds();
-        _pipe->_nf_queue.push(std::make_shared<NavFrame>(
-            Eigen::Vector3d((double)msg_ubx.lat * 1e-7, (double)msg_ubx.lon * 1e-7, (double)msg_ubx.height * 1e-3), ts_long));
+
+        GNSSMeas gnss_meas;
+        gnss_meas.llh_meas =
+            Eigen::Vector3d((double)gnss_msg.latitude, (double)gnss_msg.longitude, (double)gnss_msg.altitude);
+        gnss_meas.cov = Eigen::Vector3d((double)gnss_msg.position_covariance[0],
+                                        (double)gnss_msg.position_covariance[4],
+                                        (double)gnss_msg.position_covariance[8]);
+        gnss_meas.status = gnss_msg.status.status;
+        gnss_meas.service = gnss_msg.status.service;
+
+        _pipe->_nf_queue.push(std::make_shared<NavFrame>(gnss_meas, ts_long));
     }
 
     void subRightImage(const sensor_msgs::msg::Image &img_msg) {
@@ -199,5 +209,5 @@ class SensorSubscriber : public rclcpp::Node {
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr _subscription_left;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr _subscription_right;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr _subscription_imu;
-    rclcpp::Subscription<ublox_msgs::msg::NavPVT>::SharedPtr _subscription_ubx;
+    rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr _subscription_ubx;
 };

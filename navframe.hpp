@@ -3,13 +3,20 @@
 
 #include <Eigen/Dense>
 
+struct GNSSMeas {
+  Eigen::Vector3d llh_meas;
+  Eigen::Vector3d cov;
+  int status;
+  int service;
+};
+
 class NavFrame {
 public:
   NavFrame(){};
-  NavFrame(Eigen::Vector3d llh_meas, unsigned long long timestamp)
-      : _llh_meas(llh_meas), _timestamp(timestamp){};
+  NavFrame(GNSSMeas gnss_meas, unsigned long long timestamp)
+      : _gnss_meas(gnss_meas), _timestamp(timestamp){};
 
-  Eigen::Vector3d _llh_meas;
+  GNSSMeas _gnss_meas;
   Eigen::Affine3d _T_n_f;
   unsigned long long _timestamp;
 };
