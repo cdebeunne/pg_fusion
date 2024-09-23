@@ -10,7 +10,7 @@ int main(int argc, char **argv)
   rclcpp::init(argc, argv);
 
   // Create the SLAM parameter object
-  std::string path = "/home/cesar/ros2_ws/src/SaDVIO/ros/config";
+  std::string path = "/home/deos/ce.debeunne/colcon_ws/src/SaDVIO/ros/config";
   std::shared_ptr<isae::SLAMParameters> slam_param =
         std::make_shared<isae::SLAMParameters>(path);
 

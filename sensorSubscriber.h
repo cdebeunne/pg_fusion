@@ -45,7 +45,7 @@ class SensorSubscriber : public rclcpp::Node {
         rclcpp::Time ts = rclcpp::Clock{RCL_ROS_TIME}.now();
         unsigned long long ts_long = (unsigned long long)ts.nanoseconds();
         _pipe->_nf_queue.push(std::make_shared<NavFrame>(
-            Eigen::Vector3d((double)msg_ubx.lat * 1e-7, (double)msg_ubx.lon * 1e-7, (double)msg_ubx.height) * 1e-3, ts_long));
+            Eigen::Vector3d((double)msg_ubx.lat * 1e-7, (double)msg_ubx.lon * 1e-7, (double)msg_ubx.height * 1e-3), ts_long));
     }
 
     void subRightImage(const sensor_msgs::msg::Image &img_msg) {

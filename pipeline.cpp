@@ -3,10 +3,10 @@
 const Eigen::Vector3d Pipeline::llhToEcef(const Eigen::Vector3d &llh)
 {
     double Sp = std::sin(llh.x() * deg2rad);
-    double Cp = std::cos(llh.y() * deg2rad);
+    double Cp = std::cos(llh.x() * deg2rad);
     double Sl = std::sin(llh.y() * deg2rad);
     double Cl = std::cos(llh.y() * deg2rad);
-    double N = _a / sqrt(1 - _e2 * Sp * Sp);
+    double N = _a / std::sqrt(1 - _e2 * Sp * Sp);
     Eigen::Vector3d out;
     out.x() = (N + llh.z()) * Cp * Cl;
     out.y() = (N + llh.z()) * Cp * Sl;
