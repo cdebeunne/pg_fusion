@@ -130,16 +130,19 @@ class SensorSubscriber : public rclcpp::Node {
 
                         // Check if this measurement can be added to the current frame
                         if (std::abs(t_curr - t_last) * 1e-9 > time_tolerance && !sensors.empty()) {
+
+                            // Create a frame with the stored sensors
                             std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
                             f->init(sensors, t_last);
 
-                            // Add a gnss measurement if available
-                            if (_gnss_buf.empty()) {
+                            // Add a gnss measurement if available and images in the frame
+                            if (_gnss_buf.empty() || f->getSensors().empty()) {
                                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
                             } else {
                                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
                                 _gnss_buf.pop();
                             }
+
                             sensors.clear();
                         }
 
@@ -169,9 +172,19 @@ class SensorSubscriber : public rclcpp::Node {
 
                     // Check if this measurement can be added to the current frame
                     if (std::abs(t_curr - t_last) * 1e-9 > time_tolerance && !sensors.empty()) {
+
+                        // Create a frame with the stored sensors
                         std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
                         f->init(sensors, t_last);
-                        _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
+
+                        // Add a gnss measurement if available and images in the frame
+                        if (_gnss_buf.empty() || f->getSensors().empty()) {
+                            _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
+                        } else {
+                            _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
+                            _gnss_buf.pop();
+                        }
+
                         sensors.clear();
                     }
 
@@ -192,9 +205,19 @@ class SensorSubscriber : public rclcpp::Node {
 
                 // Check if this measurement can be added to the current frame
                 if (std::abs(t_curr - t_last) * 1e-9 > time_tolerance && !sensors.empty()) {
+
+                    // Create a frame with the stored sensors
                     std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
                     f->init(sensors, t_last);
-                    _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
+
+                    // Add a gnss measurement if available
+                    if (_gnss_buf.empty() || f->getSensors().empty()) {
+                        _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
+                    } else {
+                        _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
+                        _gnss_buf.pop();
+                    }
+
                     sensors.clear();
                 }
 

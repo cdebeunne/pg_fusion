@@ -28,7 +28,7 @@ class NavFrame {
 
     std::shared_ptr<isae::Frame> _frame;
     std::shared_ptr<GNSSMeas> _gnss_meas;
-    Eigen::Affine3d _T_n_f;
+    Eigen::Affine3d _T_n_f, _T_w_f;
     unsigned long long _timestamp;
 };
 

@@ -33,10 +33,14 @@ int main(int argc, char **argv) {
     std::shared_ptr<Pipeline> pipe = std::make_shared<Pipeline>(SLAM);
 
     // Start the sensor subscriber
-    std::shared_ptr<SensorSubscriber> sensor_subscriber = std::make_shared<SensorSubscriber>(
-        slam_param->getDataProvider(), pipe, config["gnss_topic"].as<std::string>());
+    std::shared_ptr<SensorSubscriber> sensor_subscriber =
+        std::make_shared<SensorSubscriber>(slam_param->getDataProvider(), pipe, config["gnss_topic"].as<std::string>());
 
-    // Launch full odom thread
+    // Launch SLAM thread
+    std::thread odom_thread(&isae::SLAMCore::runFullOdom, SLAM);
+    odom_thread.detach();
+
+    // Launch pipeline thread
     std::thread pg_thread(&Pipeline::run, pipe);
     pg_thread.detach();
 

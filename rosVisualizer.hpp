@@ -26,6 +26,7 @@ class RosVisualizer : public rclcpp::Node {
 
         _pub_traj                = this->create_publisher<visualization_msgs::msg::Marker>("pg_traj", 1000);
         _pub_pose                = this->create_publisher<geometry_msgs::msg::PoseStamped>("pg_pose", 1000);
+        _pub_slam                = this->create_publisher<geometry_msgs::msg::PoseStamped>("pg_slam", 1000);
         _tf_broadcaster             = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
         _traj_msg.type    = visualization_msgs::msg::Marker::LINE_STRIP;
@@ -45,7 +46,7 @@ class RosVisualizer : public rclcpp::Node {
 
         // Deal with position
         geometry_msgs::msg::Point p;
-        const Eigen::Vector3d tnf = frame->_T_n_f.translation();
+        Eigen::Vector3d tnf = frame->_T_n_f.translation();
         p.x                       = tnf.x();
         p.y                       = tnf.y();
         p.z                       = tnf.z();
@@ -53,7 +54,7 @@ class RosVisualizer : public rclcpp::Node {
 
         // Deal with orientation
         geometry_msgs::msg::Quaternion q;
-        const Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)frame->_T_n_f.linear();
+        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)frame->_T_n_f.linear();
         q.x                              = eigen_q.x();
         q.y                              = eigen_q.y();
         q.z                              = eigen_q.z();
@@ -73,6 +74,39 @@ class RosVisualizer : public rclcpp::Node {
 
         // publish messages
         _pub_pose->publish(Tnf_msg);
+
+        geometry_msgs::msg::PoseStamped Twf_msg;
+        Twf_msg.header.stamp    = rclcpp::Time(frame->_timestamp);
+        Twf_msg.header.frame_id = "world";
+
+        // Deal with position
+        Eigen::Vector3d twf = frame->_T_w_f.translation();
+        p.x                       = twf.x();
+        p.y                       = twf.y();
+        p.z                       = twf.z();
+        Twf_msg.pose.position     = p;
+
+        // Deal with orientation
+        eigen_q = (Eigen::Quaterniond)frame->_T_w_f.linear();
+        q.x                              = eigen_q.x();
+        q.y                              = eigen_q.y();
+        q.z                              = eigen_q.z();
+        q.w                              = eigen_q.w();
+        Twf_msg.pose.orientation         = q;
+
+        // Publish transform
+        geometry_msgs::msg::TransformStamped Twf_tf;
+        Twf_tf.header.stamp            = rclcpp::Time(frame->_timestamp);
+        Twf_tf.header.frame_id         = "world";
+        Twf_tf.child_frame_id          = "slam";
+        Twf_tf.transform.translation.x = twf.x();
+        Twf_tf.transform.translation.y = twf.y();
+        Twf_tf.transform.translation.z = twf.z();
+        Twf_tf.transform.rotation      = Twf_msg.pose.orientation;
+        _tf_broadcaster->sendTransform(Twf_tf);
+
+        // publish messages
+        _pub_slam->publish(Twf_msg);
     }
 
     void runVisualizer(std::shared_ptr<Pipeline> pipe) {
@@ -87,7 +121,7 @@ class RosVisualizer : public rclcpp::Node {
     }
 
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr _pub_traj;
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr _pub_pose;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr _pub_pose, _pub_slam;
     std::shared_ptr<tf2_ros::TransformBroadcaster> _tf_broadcaster;
     visualization_msgs::msg::Marker _traj_msg;
 };
