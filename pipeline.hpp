@@ -3,7 +3,8 @@
 
 #include <Eigen/Dense>
 #include "navframe.hpp"
-#include "isaeslam/slamCore.h"
+#include <ceres/ceres.h>
+#include "poseGraph.hpp"
 #include <queue>
 #include <memory>
 #include <iostream>
@@ -21,6 +22,9 @@ class Pipeline {
       _f = (1.0f/298.257223563);
       _e2 = 1-(1-_f)*(1-_f);
 
+      _T_n_w = Eigen::Affine3d::Identity();
+      _is_init = false;
+
     };
 
     void setRef(const Eigen::Vector3d &llh_ref);
@@ -28,14 +32,16 @@ class Pipeline {
     const Eigen::Vector3d ecefToENU(const Eigen::Vector3d &ecef);
 
     std::shared_ptr<NavFrame> next();
+    void calibrateRotation();
     void run();
     void init();
     void step();
 
     std::shared_ptr<isae::SLAMCore> _slam; // VSLAM
-
+    bool _is_init;
     double _a, _f, _e2; // Ellipsoid parameters for Earth coordinates
     Eigen::Matrix3d _R_n_e;
+    Eigen::Affine3d _T_n_w;
     Eigen::Vector3d _llh_ref, _ecef_ref;
     std::queue<std::shared_ptr<NavFrame>> _nf_queue;
     std::vector<std::shared_ptr<NavFrame>> _nav_frames;

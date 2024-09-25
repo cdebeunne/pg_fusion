@@ -4,12 +4,13 @@
 #include "navframe.hpp"
 #include <Eigen/Dense>
 #include <ceres/ceres.h>
-#include <parametersBlock.hpp>
+#include "isaeslam/slamCore.h"
 #include <unordered_map>
 #include <utilities/geometry.h>
 #include <vector>
 
-struct PoseFactor {
+struct PoseFactor
+{
 
   Eigen::Affine3d T_a_b;
   Eigen::MatrixXd inf;
@@ -17,24 +18,28 @@ struct PoseFactor {
   unsigned long long ts_b;
 };
 
-struct RelativePoseFactor {
+struct RelativePoseFactor
+{
   Eigen::Affine3d T_a_b;
   Eigen::MatrixXd inf;
   std::shared_ptr<NavFrame> nf_a;
   std::shared_ptr<NavFrame> nf_b;
 };
 
-struct AbsolutePoseFactor {
+struct AbsolutePoseFactor
+{
   Eigen::Affine3d T;
   Eigen::MatrixXd inf;
   std::shared_ptr<NavFrame> nf;
 };
 
-class PoseGraph {
+class PoseGraph
+{
 public:
-  PoseGraph(){};
+  PoseGraph() {};
 
-  std::unordered_map<unsigned long long, Eigen::Affine3d> const getNodesMap() {
+  std::unordered_map<unsigned long long, Eigen::Affine3d> const getNodesMap()
+  {
     return _nodes_map;
   }
   std::vector<std::pair<unsigned long long, Eigen::Affine3d>> getNodes();
@@ -57,7 +62,8 @@ private:
 };
 
 // Residuals needed for pose graph optim
-class PosePriordx : public ceres::SizedCostFunction<6, 6> {
+class PosePriordx : public ceres::SizedCostFunction<6, 6>
+{
 public:
   PosePriordx(const Eigen::Affine3d T, const Eigen::Affine3d T_prior,
               const Eigen::MatrixXd sqrt_inf)
@@ -65,12 +71,14 @@ public:
   PosePriordx() {}
 
   virtual bool Evaluate(double const *const *parameters, double *residuals,
-                        double **jacobians) const {
+                        double **jacobians) const
+  {
     Eigen::Map<isae::Vector6d> err(residuals);
     Eigen::Affine3d T = _T * isae::geometry::se3_doubleVec6dtoRT(parameters[0]);
     err = _sqrt_inf * isae::geometry::se3_RTtoVec6d(T * _T_prior.inverse());
 
-    if (jacobians != NULL) {
+    if (jacobians != NULL)
+    {
       Eigen::Map<Eigen::Matrix<double, 6, 6, Eigen::RowMajor>> J(jacobians[0]);
       J.setIdentity();
       Eigen::Vector3d dw =
@@ -97,8 +105,41 @@ public:
   Eigen::MatrixXd _sqrt_inf;
 };
 
+// Residuals for orientation calibration
+class OrientationCalib : public ceres::SizedCostFunction<3, 2>
+{
+public:
+  OrientationCalib(const Eigen::Vector3d t_w_f, const Eigen::Vector3d t_e_f,
+                   const Eigen::Matrix3d sqrt_inf)
+      : _t_w_f(t_w_f), _t_e_f(t_e_f) {}
+  OrientationCalib() {}
+
+  virtual bool Evaluate(double const *const *parameters, double *residuals,
+                        double **jacobians) const
+  {
+
+    Eigen::Map<Eigen::Vector3d> err(residuals);
+    Eigen::Vector3d w = Eigen::Vector3d(parameters[0][0], parameters[0][1], parameters[0][2]);
+    Eigen::Matrix3d R_e_w = isae::geometry::exp_so3(Eigen::Vector3d(parameters[0][0], parameters[0][1], parameters[0][2]));
+    Eigen::Vector3d t_e_f_est = R_e_w * _t_w_f;
+    err = _sqrt_inf * (t_e_f_est - _t_e_f);
+
+    if (jacobians != NULL)
+    {
+      Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> J(jacobians[0]);
+      J = - R_e_w * isae::geometry::skewMatrix(_t_w_f) * isae::geometry::so3_rightJacobian(w); 
+    }
+
+    return true;
+  }
+
+  Eigen::Vector3d _t_w_f, _t_e_f;
+  Eigen::Matrix3d _sqrt_inf;
+};
+
 // Residuals needed for pose graph optim
-class Relative6DPose : public ceres::SizedCostFunction<6, 6, 6> {
+class Relative6DPose : public ceres::SizedCostFunction<6, 6, 6>
+{
 public:
   Relative6DPose(const Eigen::Affine3d T_w_a, const Eigen::Affine3d T_w_b,
                  const Eigen::Affine3d T_a_b_prior,
@@ -108,7 +149,8 @@ public:
   Relative6DPose() {}
 
   virtual bool Evaluate(double const *const *parameters, double *residuals,
-                        double **jacobians) const {
+                        double **jacobians) const
+  {
     Eigen::Map<isae::Vector6d> err(residuals);
     Eigen::Affine3d T_w_a_up =
         _T_w_a * isae::geometry::se3_doubleVec6dtoRT(parameters[0]);
@@ -118,13 +160,15 @@ public:
     Eigen::Affine3d T = T_b_a_prior * T_w_a_up.inverse() * T_w_b_up;
     err = _sqrt_inf * isae::geometry::se3_RTtoVec6d(T);
 
-    if (jacobians != NULL) {
+    if (jacobians != NULL)
+    {
 
       Eigen::Vector3d tb = T_w_b_up.translation();
       Eigen::Vector3d ta = T_w_a_up.translation();
       Eigen::Vector3d w = isae::geometry::log_so3(T.rotation());
 
-      if (jacobians[0] != NULL) {
+      if (jacobians[0] != NULL)
+      {
         Eigen::Map<Eigen::Matrix<double, 6, 6, Eigen::RowMajor>> J(
             jacobians[0]);
         J.setIdentity();
@@ -148,7 +192,8 @@ public:
         J = _sqrt_inf * J;
       }
 
-      if (jacobians[1] != NULL) {
+      if (jacobians[1] != NULL)
+      {
         Eigen::Map<Eigen::Matrix<double, 6, 6, Eigen::RowMajor>> J(
             jacobians[1]);
         J.setIdentity();

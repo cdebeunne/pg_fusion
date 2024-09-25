@@ -45,10 +45,10 @@ void PoseGraph::solveGraph() {
     ceres::Problem problem;
     ceres::LossFunction *loss_function = new ceres::HuberLoss(std::sqrt(1.345));
 
-    std::unordered_map<unsigned long long, PoseParametersBlock> ts_pose_map;
+    std::unordered_map<unsigned long long, isae::PoseParametersBlock> ts_pose_map;
 
     for (auto ts_pose : _nodes_map) {
-        ts_pose_map.emplace(ts_pose.first, PoseParametersBlock(Eigen::Affine3d::Identity()));
+        ts_pose_map.emplace(ts_pose.first, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
         problem.AddParameterBlock(ts_pose_map.at(ts_pose.first).values(), 6);
 
         // Solve the gauge freedom
