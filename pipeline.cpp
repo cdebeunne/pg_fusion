@@ -85,6 +85,9 @@ void Pipeline::init() {
     while (_nf->_T_n_f.translation().norm() < 5) {
         step();
     }
+
+    // Then compute the yaw between ENU and W
+    // and update the poses
     calibrateRotation();
 
     _is_init = true;
@@ -111,15 +114,36 @@ void Pipeline::step() {
     _nf->_T_w_f = _T_n_w * frame_ready->getFrame2WorldTransform();
 
     // Compute position in the local frame
-    Eigen::Vector3d t_n_f = ecefToENU(llhToEcef(_nf->_gnss_meas->llh_meas));
-    Eigen::Affine3d T_n_f = Eigen::Affine3d::Identity();
-    T_n_f.translation()   = t_n_f;
+    Eigen::Vector3d t_n_f            = ecefToENU(llhToEcef(_nf->_gnss_meas->llh_meas));
+    Eigen::Affine3d T_n_f            = Eigen::Affine3d::Identity();
+    T_n_f.translation()              = t_n_f;
+    T_n_f.affine().block(0, 0, 3, 3) = _nf->_T_w_f.rotation();
 
     // Set pose
     _nf->_T_n_f = T_n_f;
 
+    // add absolute pose contraint
+    AbsolutePoseFactor af;
+    af.T   = _nf->_T_n_f;
+    af.nf  = _nf;
+    af.inf = Eigen::MatrixXd::Identity(6, 6);
+    _pg->_nf_absfact_map.emplace(_nf, af);
+
+    // add relative pose constraints
+    RelativePoseFactor rf;
+    rf.nf_a  = _nav_frames.back();
+    rf.nf_b  = _nf;
+    rf.T_a_b = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
+    rf.inf   = Eigen::MatrixXd::Identity(6, 6);
+    _pg->_nf_relfact_map.emplace(_nf, rf);
+
     // Add to the nav frame vector
     _nav_frames.push_back(_nf);
+
+    // Solve pg
+    if (_is_init) {
+        _pg->solveGraph();
+    }
 }
 
 void Pipeline::run() {
@@ -167,11 +191,11 @@ void Pipeline::calibrateRotation() {
 
     // Update the parameter and the poses
     _T_n_w = Eigen::Affine3d::Identity();
-    _T_n_w.affine().block(0, 0, 3, 3) << std::cos(theta[0]), -std::sin(theta[0]), 0, 
-        std::sin(theta[0]), std::cos(theta[0]), 0, 
-        0, 0, 1;
+    _T_n_w.affine().block(0, 0, 3, 3) << std::cos(theta[0]), -std::sin(theta[0]), 0, std::sin(theta[0]),
+        std::cos(theta[0]), 0, 0, 0, 1;
 
     for (auto nf : _nav_frames) {
-        nf->_T_w_f = _T_n_w * nf->_T_w_f;
+        nf->_T_w_f                            = _T_n_w * nf->_T_w_f;
+        nf->_T_n_f.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
     }
 }

@@ -9,15 +9,6 @@
 #include <utilities/geometry.h>
 #include <vector>
 
-struct PoseFactor
-{
-
-  Eigen::Affine3d T_a_b;
-  Eigen::MatrixXd inf;
-  unsigned long long ts_a;
-  unsigned long long ts_b;
-};
-
 struct RelativePoseFactor
 {
   Eigen::Affine3d T_a_b;
@@ -38,27 +29,10 @@ class PoseGraph
 public:
   PoseGraph() {};
 
-  std::unordered_map<unsigned long long, Eigen::Affine3d> const getNodesMap()
-  {
-    return _nodes_map;
-  }
-  std::vector<std::pair<unsigned long long, Eigen::Affine3d>> getNodes();
-
-  void addPose(unsigned long long ts, Eigen::Affine3d &pose);
-  void addEdge(unsigned long long ts_a, unsigned long long ts_b,
-               const Eigen::Affine3d &T_a_b, const Eigen::MatrixXd &inf);
-
-  unsigned int numNodes();
-  unsigned int numEdges();
-
   void solveGraph();
 
-  unsigned long long
-      _ts_gauge; // ts of the pose that needs to be fixed for gauge freedom
-
-private:
-  std::unordered_map<unsigned long long, Eigen::Affine3d> _nodes_map;
-  std::vector<PoseFactor> _edge_constraints; // Constraints for each edge
+  std::unordered_map<std::shared_ptr<NavFrame>, AbsolutePoseFactor> _nf_absfact_map;
+  std::unordered_map<std::shared_ptr<NavFrame>, RelativePoseFactor> _nf_relfact_map;
 };
 
 // Residuals needed for pose graph optim

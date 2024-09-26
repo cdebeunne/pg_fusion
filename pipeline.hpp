@@ -24,6 +24,7 @@ class Pipeline {
 
       _T_n_w = Eigen::Affine3d::Identity();
       _is_init = false;
+      _pg = std::make_shared<PoseGraph>();
 
     };
 
@@ -38,6 +39,7 @@ class Pipeline {
     void step();
 
     std::shared_ptr<isae::SLAMCore> _slam; // VSLAM
+    std::shared_ptr<PoseGraph> _pg; // Pose graph
     bool _is_init;
     double _a, _f, _e2; // Ellipsoid parameters for Earth coordinates
     Eigen::Matrix3d _R_n_e;
