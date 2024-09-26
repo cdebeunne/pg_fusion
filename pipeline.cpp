@@ -124,9 +124,10 @@ void Pipeline::step() {
 
     // add absolute pose contraint
     AbsolutePoseFactor af;
-    af.T   = _nf->_T_n_f;
-    af.nf  = _nf;
-    af.inf = Eigen::MatrixXd::Identity(6, 6);
+    af.T                     = _nf->_T_n_f;
+    af.nf                    = _nf;
+    af.inf                   = Eigen::MatrixXd::Identity(6, 6);
+    af.inf.block(3, 3, 3, 3) = 0.001 * _nf->_gnss_meas->cov.asDiagonal().inverse();
     _pg->_nf_absfact_map.emplace(_nf, af);
 
     // add relative pose constraints
@@ -197,5 +198,9 @@ void Pipeline::calibrateRotation() {
     for (auto nf : _nav_frames) {
         nf->_T_w_f                            = _T_n_w * nf->_T_w_f;
         nf->_T_n_f.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
+
+        // Update the pose graph if there is a factor
+        if (_pg->_nf_absfact_map.find(nf) != _pg->_nf_absfact_map.end())
+            _pg->_nf_absfact_map.at(nf).T = nf->_T_n_f;
     }
 }

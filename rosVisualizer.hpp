@@ -109,12 +109,33 @@ class RosVisualizer : public rclcpp::Node {
         _pub_slam->publish(Twf_msg);
     }
 
+    void publishMap(const std::vector<std::shared_ptr<NavFrame>> nav_frames) {
+
+        _traj_msg.header.stamp    = rclcpp::Node::now();
+        _traj_msg.header.frame_id = "world";
+        _traj_msg.points.clear();
+        geometry_msgs::msg::Point p;
+
+        for (auto &frame : nav_frames) {
+            const Eigen::Vector3d twc = frame->_T_n_f.translation();
+            p.x                       = twc.x();
+            p.y                       = twc.y();
+            p.z                       = twc.z();
+            _traj_msg.points.push_back(p);
+        }
+
+        // publish message
+        _pub_traj->publish(_traj_msg);
+    }
+
     void runVisualizer(std::shared_ptr<Pipeline> pipe) {
 
         while (true) {
             
-            if (!pipe->_nav_frames.empty())
+            if (!pipe->_nav_frames.empty()) {
                 publishFrame(pipe->_nav_frames.back());
+                publishMap(pipe->_nav_frames);
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         }
