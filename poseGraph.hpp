@@ -106,7 +106,40 @@ public:
 };
 
 // Residuals for orientation calibration
-class OrientationCalib : public ceres::SizedCostFunction<3, 2>
+class OrientationCalib2D : public ceres::SizedCostFunction<2, 1>
+{
+public:
+  OrientationCalib2D(const Eigen::Vector3d t_w_f, const Eigen::Vector3d t_e_f,
+                   const Eigen::Matrix2d sqrt_inf)
+      : _t_w_f(t_w_f), _t_e_f(t_e_f), _sqrt_inf(sqrt_inf) {}
+  OrientationCalib2D() {}
+
+  virtual bool Evaluate(double const *const *parameters, double *residuals,
+                        double **jacobians) const
+  {
+
+    Eigen::Map<Eigen::Vector2d> err(residuals);
+    double theta = parameters[0][0];
+    Eigen::Matrix2d R, Rd;
+    R << std::cos(theta), -std::sin(theta), std::sin(theta), std::cos(theta);
+    Rd << -std::sin(theta), -std::cos(theta), std::cos(theta), -std::sin(theta);
+    Eigen::Vector2d t_e_f_est = R * _t_w_f.segment(0,2);
+    err = _sqrt_inf * (t_e_f_est - _t_e_f.segment(0,2));
+
+    if (jacobians != NULL)
+    {
+      Eigen::Map<Eigen::Vector2d> J(jacobians[0]);
+      J =  _sqrt_inf * Rd * _t_w_f.segment(0,2); 
+    }
+
+    return true;
+  }
+
+  Eigen::Vector3d _t_w_f, _t_e_f;
+  Eigen::Matrix2d _sqrt_inf;
+};
+
+class OrientationCalib : public ceres::SizedCostFunction<3, 3>
 {
 public:
   OrientationCalib(const Eigen::Vector3d t_w_f, const Eigen::Vector3d t_e_f,

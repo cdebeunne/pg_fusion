@@ -117,7 +117,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /pg_pose
+        Value: /pg_slam
       Value: true
   Enabled: true
   Global Options:
