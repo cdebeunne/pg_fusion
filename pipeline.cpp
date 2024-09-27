@@ -76,6 +76,14 @@ void Pipeline::init() {
     Eigen::Affine3d T_n_f = Eigen::Affine3d::Identity();
     _nf->_T_n_f           = T_n_f;
 
+    // add absolute pose contraint
+    AbsolutePoseFactor af;
+    af.T                     = _nf->_T_n_f;
+    af.nf                    = _nf;
+    af.inf                   = Eigen::MatrixXd::Identity(6, 6);
+    af.inf.block(3, 3, 3, 3) = 0.001 * _nf->_gnss_meas->cov.asDiagonal().inverse();
+    _pg->_nf_absfact_map.emplace(_nf, af);
+
     // Add to the nav frame vector
     _nav_frames.push_back(_nf);
 
