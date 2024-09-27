@@ -38,15 +38,15 @@ class RosVisualizer : public rclcpp::Node {
 
     }
 
-    void publishFrame(const std::shared_ptr<NavFrame> frame) {
+    void publishPose(const Eigen::Affine3d T_n_f) {
 
         geometry_msgs::msg::PoseStamped Tnf_msg;
-        Tnf_msg.header.stamp    = rclcpp::Time(frame->_timestamp);
+        Tnf_msg.header.stamp    = rclcpp::Node::now();
         Tnf_msg.header.frame_id = "world";
 
         // Deal with position
         geometry_msgs::msg::Point p;
-        Eigen::Vector3d tnf = frame->_T_n_f.translation();
+        Eigen::Vector3d tnf = T_n_f.translation();
         p.x                       = tnf.x();
         p.y                       = tnf.y();
         p.z                       = tnf.z();
@@ -54,7 +54,7 @@ class RosVisualizer : public rclcpp::Node {
 
         // Deal with orientation
         geometry_msgs::msg::Quaternion q;
-        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)frame->_T_n_f.linear();
+        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)T_n_f.linear();
         q.x                              = eigen_q.x();
         q.y                              = eigen_q.y();
         q.z                              = eigen_q.z();
@@ -63,7 +63,7 @@ class RosVisualizer : public rclcpp::Node {
 
         // Publish transform
         geometry_msgs::msg::TransformStamped Tnf_tf;
-        Tnf_tf.header.stamp            = rclcpp::Time(frame->_timestamp);
+        Tnf_tf.header.stamp            = rclcpp::Node::now();
         Tnf_tf.header.frame_id         = "world";
         Tnf_tf.child_frame_id          = "robot";
         Tnf_tf.transform.translation.x = tnf.x();
@@ -74,12 +74,16 @@ class RosVisualizer : public rclcpp::Node {
 
         // publish messages
         _pub_pose->publish(Tnf_msg);
+    }
+
+    void publishFrame(const std::shared_ptr<NavFrame> frame) {
 
         geometry_msgs::msg::PoseStamped Twf_msg;
         Twf_msg.header.stamp    = rclcpp::Time(frame->_timestamp);
         Twf_msg.header.frame_id = "world";
 
         // Deal with position
+        geometry_msgs::msg::Point p;
         Eigen::Vector3d twf = frame->_T_w_f.translation();
         p.x                       = twf.x();
         p.y                       = twf.y();
@@ -87,7 +91,8 @@ class RosVisualizer : public rclcpp::Node {
         Twf_msg.pose.position     = p;
 
         // Deal with orientation
-        eigen_q = (Eigen::Quaterniond)frame->_T_w_f.linear();
+        geometry_msgs::msg::Quaternion q;
+        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)frame->_T_w_f.linear();
         q.x                              = eigen_q.x();
         q.y                              = eigen_q.y();
         q.z                              = eigen_q.z();
@@ -133,6 +138,7 @@ class RosVisualizer : public rclcpp::Node {
         while (true) {
             
             if (!pipe->_nav_frames.empty()) {
+                publishPose(pipe->_T_n_f);
                 publishFrame(pipe->_nav_frames.back());
                 publishMap(pipe->_nav_frames);
             }

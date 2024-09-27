@@ -22,6 +22,7 @@ class Pipeline {
       _f = (1.0f/298.257223563);
       _e2 = 1-(1-_f)*(1-_f);
 
+      _T_n_f = Eigen::Affine3d::Identity(); 
       _T_n_w = Eigen::Affine3d::Identity();
       _is_init = false;
       _pg = std::make_shared<PoseGraph>();
@@ -42,6 +43,7 @@ class Pipeline {
     std::shared_ptr<PoseGraph> _pg; // Pose graph
     bool _is_init;
     double _a, _f, _e2; // Ellipsoid parameters for Earth coordinates
+    Eigen::Affine3d _T_n_f; // Current pose
     Eigen::Matrix3d _R_n_e;
     Eigen::Affine3d _T_n_w;
     Eigen::Vector3d _llh_ref, _ecef_ref;

@@ -107,19 +107,28 @@ void Pipeline::step() {
     _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
 
     // Wait for a frame with GPS
+    std::shared_ptr<isae::Frame> frame_ready;
     while (_nf->_gnss_meas == nullptr) {
         _nf = next();
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
-    }
 
-    // Get the ouput from the SLAM
-    std::shared_ptr<isae::Frame> frame_ready = _slam->_frame_to_display;
-    while (frame_ready != _nf->_frame) {
-        frame_ready = _slam->_frame_to_display;
-    }
+        // Ignore if IMU only
+        if (_nf->_frame->getSensors().size() == 0)
+            continue;
 
-    // Save the pose in the SLAM frame
-    _nf->_T_w_f = _T_n_w * frame_ready->getFrame2WorldTransform();
+        // Get the ouput from the SLAM
+        std::shared_ptr<isae::Frame> frame_ready = _slam->_frame_to_display;
+        while (frame_ready != _nf->_frame) {
+            frame_ready = _slam->_frame_to_display;
+        }
+
+        _nf->_T_w_f = _T_n_w * frame_ready->getFrame2WorldTransform();
+
+        // Compute the current pose
+        Eigen::Affine3d T_n_flast = _nav_frames.back()->_T_n_f;
+        Eigen::Affine3d T_flast_f = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
+        _T_n_f               = T_n_flast * T_flast_f;
+    }
 
     // Compute position in the local frame
     Eigen::Vector3d t_n_f            = ecefToENU(llhToEcef(_nf->_gnss_meas->llh_meas));
@@ -132,18 +141,20 @@ void Pipeline::step() {
 
     // add absolute pose contraint
     AbsolutePoseFactor af;
-    af.T                     = _nf->_T_n_f;
-    af.nf                    = _nf;
-    af.inf                   = Eigen::MatrixXd::Identity(6, 6);
-    af.inf.block(3, 3, 3, 3) = 0.001 * _nf->_gnss_meas->cov.asDiagonal().inverse();
+    af.T   = _nf->_T_n_f;
+    af.nf  = _nf;
+    af.inf = Eigen::MatrixXd::Identity(6, 6);
+    af.inf.block(3, 3, 3, 3) << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)),
+        0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(2));
     _pg->_nf_absfact_map.emplace(_nf, af);
 
     // add relative pose constraints
     RelativePoseFactor rf;
-    rf.nf_a  = _nav_frames.back();
-    rf.nf_b  = _nf;
-    rf.T_a_b = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
-    rf.inf   = Eigen::MatrixXd::Identity(6, 6);
+    rf.nf_a                  = _nav_frames.back();
+    rf.nf_b                  = _nf;
+    rf.T_a_b                 = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
+    rf.inf                   = Eigen::MatrixXd::Identity(6, 6);
+    rf.inf.block(3, 3, 3, 3) = 100 * Eigen::Matrix3d::Identity(); // cm accuracy
     _pg->_nf_relfact_map.emplace(_nf, rf);
 
     // Add to the nav frame vector
