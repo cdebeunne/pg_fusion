@@ -14,11 +14,9 @@ void PoseGraph::solveGraph() {
         problem.AddParameterBlock(nf_pose_map.at(nf_absfact.first).values(), 6);
 
         ceres::CostFunction *cost_fct =
-            new PosePriordx(nf_absfact.first->_T_n_f, nf_absfact.second.T, nf_absfact.second.inf);
+            new PositionPrior(nf_absfact.first->_T_n_f, nf_absfact.second.t, nf_absfact.second.inf);
 
-        problem.AddResidualBlock(cost_fct,
-                                 loss_function,
-                                 nf_pose_map.at(nf_absfact.second.nf).values());
+        problem.AddResidualBlock(cost_fct, loss_function, nf_pose_map.at(nf_absfact.second.nf).values());
     }
 
     // Add all constraints

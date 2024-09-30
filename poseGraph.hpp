@@ -17,10 +17,10 @@ struct RelativePoseFactor
   std::shared_ptr<NavFrame> nf_b;
 };
 
-struct AbsolutePoseFactor
+struct AbsolutePositionFactor
 {
-  Eigen::Affine3d T;
-  Eigen::MatrixXd inf;
+  Eigen::Vector3d t;
+  Eigen::Matrix3d inf;
   std::shared_ptr<NavFrame> nf;
 };
 
@@ -31,7 +31,7 @@ public:
 
   void solveGraph();
 
-  std::unordered_map<std::shared_ptr<NavFrame>, AbsolutePoseFactor> _nf_absfact_map;
+  std::unordered_map<std::shared_ptr<NavFrame>, AbsolutePositionFactor> _nf_absfact_map;
   std::unordered_map<std::shared_ptr<NavFrame>, RelativePoseFactor> _nf_relfact_map;
 };
 
@@ -77,6 +77,38 @@ public:
 
   Eigen::Affine3d _T, _T_prior;
   Eigen::MatrixXd _sqrt_inf;
+};
+
+class PositionPrior : public ceres::SizedCostFunction<3, 6>
+{
+public:
+  PositionPrior(const Eigen::Affine3d T, const Eigen::Vector3d t_prior,
+              const Eigen::Matrix3d sqrt_inf)
+      : _T(T), _t_prior(t_prior), _sqrt_inf(sqrt_inf) {}
+  PositionPrior() {}
+
+  virtual bool Evaluate(double const *const *parameters, double *residuals,
+                        double **jacobians) const
+  {
+    Eigen::Map<Eigen::Vector3d> err(residuals);
+    Eigen::Affine3d T = _T * isae::geometry::se3_doubleVec6dtoRT(parameters[0]);
+    err = _sqrt_inf * (T.translation() - _t_prior);
+
+    if (jacobians != NULL)
+    {
+      Eigen::Map<Eigen::Matrix<double, 3, 6, Eigen::RowMajor>> J(jacobians[0]);
+      J.setZero();
+      J.block(0, 3, 3, 3) = _T.rotation();
+
+      J = _sqrt_inf * J;
+    }
+
+    return true;
+  }
+
+  Eigen::Affine3d _T;
+  Eigen::Vector3d _t_prior;
+  Eigen::Matrix3d _sqrt_inf;
 };
 
 // Residuals for orientation calibration

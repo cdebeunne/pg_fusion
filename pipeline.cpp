@@ -77,11 +77,13 @@ void Pipeline::init() {
     _nf->_T_n_f           = T_n_f;
 
     // add absolute pose contraint
-    AbsolutePoseFactor af;
-    af.T                     = _nf->_T_n_f;
-    af.nf                    = _nf;
-    af.inf                   = Eigen::MatrixXd::Identity(6, 6);
-    af.inf.block(3, 3, 3, 3) = 0.001 * _nf->_gnss_meas->cov.asDiagonal().inverse();
+    AbsolutePositionFactor af;
+    af.t   = _nf->_T_n_f.translation();
+    af.nf  = _nf;
+    af.inf = Eigen::Matrix3d::Identity();
+    af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)),
+        0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(2));
+    af.inf *= 0.001;
     _pg->_nf_absfact_map.emplace(_nf, af);
 
     // Add to the nav frame vector
@@ -127,7 +129,7 @@ void Pipeline::step() {
         // Compute the current pose
         Eigen::Affine3d T_n_flast = _nav_frames.back()->_T_n_f;
         Eigen::Affine3d T_flast_f = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
-        _T_n_f               = T_n_flast * T_flast_f;
+        _T_n_f                    = T_n_flast * T_flast_f;
     }
 
     // Compute position in the local frame
@@ -140,12 +142,13 @@ void Pipeline::step() {
     _nf->_T_n_f = T_n_f;
 
     // add absolute pose contraint
-    AbsolutePoseFactor af;
-    af.T   = _nf->_T_n_f;
+    AbsolutePositionFactor af;
+    af.t   = _nf->_T_n_f.translation();
     af.nf  = _nf;
-    af.inf = Eigen::MatrixXd::Identity(6, 6);
-    af.inf.block(3, 3, 3, 3) << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)),
+    af.inf = Eigen::Matrix3d::Identity();
+    af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)),
         0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(2));
+    af.inf *= 0.001;
     _pg->_nf_absfact_map.emplace(_nf, af);
 
     // add relative pose constraints
@@ -154,7 +157,7 @@ void Pipeline::step() {
     rf.nf_b                  = _nf;
     rf.T_a_b                 = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
     rf.inf                   = Eigen::MatrixXd::Identity(6, 6);
-    rf.inf.block(3, 3, 3, 3) = 100 * Eigen::Matrix3d::Identity(); // cm accuracy
+    rf.inf.block(3, 3, 3, 3) = Eigen::Matrix3d::Identity(); // cm accuracy
     _pg->_nf_relfact_map.emplace(_nf, rf);
 
     // Add to the nav frame vector
@@ -217,9 +220,5 @@ void Pipeline::calibrateRotation() {
     for (auto nf : _nav_frames) {
         nf->_T_w_f                            = _T_n_w * nf->_T_w_f;
         nf->_T_n_f.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
-
-        // Update the pose graph if there is a factor
-        if (_pg->_nf_absfact_map.find(nf) != _pg->_nf_absfact_map.end())
-            _pg->_nf_absfact_map.at(nf).T = nf->_T_n_f;
     }
 }
