@@ -100,6 +100,13 @@ void Pipeline::init() {
     // and update the poses
     calibrateRotation();
 
+    // add absolute pose contraint to fix the gauge
+    AbsolutePoseFactor ap;
+    ap.T                     = _nf->_T_n_f;
+    ap.nf                    = _nf;
+    ap.inf                   = 100 * Eigen::MatrixXd::Identity(6, 6);
+    _pg->_nf_abspose_map.emplace(_nf, ap);
+
     _is_init = true;
 }
 

@@ -9,8 +9,22 @@ void PoseGraph::solveGraph() {
     std::unordered_map<std::shared_ptr<NavFrame>, isae::PoseParametersBlock> nf_pose_map;
 
     // Add absolute pose constraints
-    for (auto &nf_absfact : _nf_absfact_map) {
+    for (auto &nf_absfact : _nf_abspose_map) {
         nf_pose_map.emplace(nf_absfact.first, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+        problem.AddParameterBlock(nf_pose_map.at(nf_absfact.first).values(), 6);
+
+        ceres::CostFunction *cost_fct =
+            new PosePriordx(nf_absfact.first->_T_n_f, nf_absfact.second.T, nf_absfact.second.inf);
+
+        problem.AddResidualBlock(cost_fct,
+                                 loss_function,
+                                 nf_pose_map.at(nf_absfact.second.nf).values());
+    }
+
+    // Add absolute pose constraints
+    for (auto &nf_absfact : _nf_absfact_map) {
+        if (nf_pose_map.find(nf_absfact.first) == nf_pose_map.end())
+            nf_pose_map.emplace(nf_absfact.first, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
         problem.AddParameterBlock(nf_pose_map.at(nf_absfact.first).values(), 6);
 
         ceres::CostFunction *cost_fct =

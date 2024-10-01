@@ -24,6 +24,13 @@ struct AbsolutePositionFactor
   std::shared_ptr<NavFrame> nf;
 };
 
+struct AbsolutePoseFactor
+{
+  Eigen::Affine3d T;
+  Eigen::MatrixXd inf;
+  std::shared_ptr<NavFrame> nf;
+};
+
 class PoseGraph
 {
 public:
@@ -31,6 +38,7 @@ public:
 
   void solveGraph();
 
+  std::unordered_map<std::shared_ptr<NavFrame>, AbsolutePoseFactor> _nf_abspose_map;
   std::unordered_map<std::shared_ptr<NavFrame>, AbsolutePositionFactor> _nf_absfact_map;
   std::unordered_map<std::shared_ptr<NavFrame>, RelativePoseFactor> _nf_relfact_map;
 };
