@@ -2,6 +2,7 @@
 #include "rosVisualizer.hpp"
 #include "sensorSubscriber.h"
 #include <yaml-cpp/yaml.h>
+#include <Eigen/Dense>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <iostream>
@@ -29,8 +30,14 @@ int main(int argc, char **argv) {
     else if (slam_param->_config.slam_mode == "monovio")
         SLAM = std::make_shared<isae::SLAMMonoVIO>(slam_param);
 
+    // Load Calibration
+    std::vector<double> data_T(16);
+    data_T                 = config["T_a_f"].as<std::vector<double>>();
+    Eigen::Matrix4d M_a_f = Eigen::Map<Eigen::Affine3d::MatrixType>(&data_T[0], 4, 4).transpose();
+    Eigen::Affine3d T_a_f(M_a_f);
+
     // Create pipeline
-    std::shared_ptr<Pipeline> pipe = std::make_shared<Pipeline>(SLAM);
+    std::shared_ptr<Pipeline> pipe = std::make_shared<Pipeline>(SLAM, T_a_f);
 
     // Start the sensor subscriber
     std::shared_ptr<SensorSubscriber> sensor_subscriber =

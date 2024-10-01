@@ -73,16 +73,16 @@ void Pipeline::init() {
 
     // Set the current frame as the reference frame
     setRef(_nf->_gnss_meas->llh_meas);
-    Eigen::Affine3d T_n_f = Eigen::Affine3d::Identity();
-    _nf->_T_n_f           = T_n_f;
+    Eigen::Affine3d T_n_a = Eigen::Affine3d::Identity();
+    _nf->_T_n_f           = T_n_a * _T_a_f;
 
     // add absolute pose contraint
     AbsolutePositionFactor af;
     af.t   = _nf->_T_n_f.translation();
     af.nf  = _nf;
     af.inf = Eigen::Matrix3d::Identity();
-    af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)),
-        0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(2));
+    af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
+        std::sqrt(1 / _nf->_gnss_meas->cov(2));
     af.inf *= 0.001;
     _pg->_nf_absfact_map.emplace(_nf, af);
 
@@ -92,7 +92,7 @@ void Pipeline::init() {
     // Calibrate the orientation
 
     // Add frames until a reasonable displacement is performed
-    while (_nf->_T_n_f.translation().norm() < 5) {
+    while (_nf->_T_n_f.translation().norm() < 3) {
         step();
     }
 
@@ -102,9 +102,9 @@ void Pipeline::init() {
 
     // add absolute pose contraint to fix the gauge
     AbsolutePoseFactor ap;
-    ap.T                     = _nf->_T_n_f;
-    ap.nf                    = _nf;
-    ap.inf                   = 100 * Eigen::MatrixXd::Identity(6, 6);
+    ap.T   = _nf->_T_n_f;
+    ap.nf  = _nf;
+    ap.inf = 100 * Eigen::MatrixXd::Identity(6, 6);
     _pg->_nf_abspose_map.emplace(_nf, ap);
 
     _is_init = true;
@@ -140,9 +140,9 @@ void Pipeline::step() {
     }
 
     // Compute position in the local frame
-    Eigen::Vector3d t_n_f            = ecefToENU(llhToEcef(_nf->_gnss_meas->llh_meas));
+    Eigen::Vector3d t_n_a            = ecefToENU(llhToEcef(_nf->_gnss_meas->llh_meas));
     Eigen::Affine3d T_n_f            = Eigen::Affine3d::Identity();
-    T_n_f.translation()              = t_n_f;
+    T_n_f.translation()              = t_n_a + _T_a_f.translation();
     T_n_f.affine().block(0, 0, 3, 3) = _nf->_T_w_f.rotation();
 
     // Set pose
@@ -153,9 +153,9 @@ void Pipeline::step() {
     af.t   = _nf->_T_n_f.translation();
     af.nf  = _nf;
     af.inf = Eigen::Matrix3d::Identity();
-    af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)),
-        0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(2));
-    af.inf *= 0.001;
+    af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
+        std::sqrt(1 / _nf->_gnss_meas->cov(2));
+    af.inf *= 0.01;
     _pg->_nf_absfact_map.emplace(_nf, af);
 
     // add relative pose constraints

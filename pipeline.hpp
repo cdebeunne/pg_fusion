@@ -15,7 +15,7 @@ double deg2rad = M_PI / 180;
 
 class Pipeline {
   public:
-    Pipeline(std::shared_ptr<isae::SLAMCore> slam): _slam(slam){
+    Pipeline(std::shared_ptr<isae::SLAMCore> slam, Eigen::Affine3d &T_a_f): _slam(slam), _T_a_f(T_a_f){
 
       // Ellipsoid parameters of the WGS84 convention
       _a = 6378137.0f;
@@ -43,9 +43,10 @@ class Pipeline {
     std::shared_ptr<PoseGraph> _pg; // Pose graph
     bool _is_init;
     double _a, _f, _e2; // Ellipsoid parameters for Earth coordinates
-    Eigen::Affine3d _T_n_f; // Current pose
-    Eigen::Matrix3d _R_n_e;
-    Eigen::Affine3d _T_n_w;
+    Eigen::Affine3d _T_n_f; // Current pose in local ENU frame 
+    Eigen::Matrix3d _R_n_e; // Rotation between ENU and ECEF
+    Eigen::Affine3d _T_n_w; // Rotation between ENU frame and SLAM (world) frame
+    Eigen::Affine3d _T_a_f; // Transformation between antena and frame
     Eigen::Vector3d _llh_ref, _ecef_ref;
     std::queue<std::shared_ptr<NavFrame>> _nf_queue;
     std::vector<std::shared_ptr<NavFrame>> _nav_frames;

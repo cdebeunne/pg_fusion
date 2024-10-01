@@ -36,10 +36,13 @@ void PoseGraph::solveGraph() {
     // Add all constraints
     for (auto &nf_relfact : _nf_relfact_map) {
 
-        // Ignore if the nf is not in the parameters
-        if (nf_pose_map.find(nf_relfact.second.nf_a) == nf_pose_map.end() ||
-            nf_pose_map.find(nf_relfact.second.nf_b) == nf_pose_map.end())
-            continue;
+        // Check if the nf are not in the parameters
+        if (nf_pose_map.find(nf_relfact.second.nf_a) == nf_pose_map.end()) 
+            nf_pose_map.emplace(nf_relfact.second.nf_a, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+        
+        if (nf_pose_map.find(nf_relfact.second.nf_b) == nf_pose_map.end()) 
+            nf_pose_map.emplace(nf_relfact.second.nf_b, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+
 
         Eigen::Affine3d T_n_a = nf_relfact.second.nf_a->_T_n_f;
         Eigen::Affine3d T_n_b = nf_relfact.second.nf_b->_T_n_f;
@@ -65,7 +68,7 @@ void PoseGraph::solveGraph() {
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
 
-    std::cout << summary.FullReport() << std::endl;
+    std::cout << summary.BriefReport() << std::endl;
 
     // Update the poses
     for (auto &nf_pose : nf_pose_map) {
