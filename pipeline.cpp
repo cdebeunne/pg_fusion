@@ -137,6 +137,7 @@ void Pipeline::step() {
         Eigen::Affine3d T_n_flast = _nav_frames.back()->_T_n_f;
         Eigen::Affine3d T_flast_f = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
         _T_n_f                    = T_n_flast * T_flast_f;
+        _nf->_T_n_f = _T_n_f;
     }
 
     // Compute position in the local frame
@@ -145,18 +146,21 @@ void Pipeline::step() {
     T_n_f.translation()              = t_n_a + _T_a_f.translation();
     T_n_f.affine().block(0, 0, 3, 3) = _nf->_T_w_f.rotation();
 
-    // Set pose
-    _nf->_T_n_f = T_n_f;
+    // Threshold on the covariance of the GNSS estimate
+    if (_nf->_gnss_meas->cov.norm() < _thresh_cov) {
+        // Set pose
+        _nf->_T_n_f = T_n_f;
 
-    // add absolute pose contraint
-    AbsolutePositionFactor af;
-    af.t   = _nf->_T_n_f.translation();
-    af.nf  = _nf;
-    af.inf = Eigen::Matrix3d::Identity();
-    af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
-        std::sqrt(1 / _nf->_gnss_meas->cov(2));
-    af.inf *= 0.01;
-    _pg->_nf_absfact_map.emplace(_nf, af);
+        // add absolute position contraint
+        AbsolutePositionFactor af;
+        af.t   = _nf->_T_n_f.translation();
+        af.nf  = _nf;
+        af.inf = Eigen::Matrix3d::Identity();
+        af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
+            std::sqrt(1 / _nf->_gnss_meas->cov(2));
+        af.inf *= 0.01;
+        _pg->_nf_absfact_map.emplace(_nf, af);
+    }
 
     // add relative pose constraints
     RelativePoseFactor rf;

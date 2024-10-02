@@ -16,16 +16,15 @@ void PoseGraph::solveGraph() {
         ceres::CostFunction *cost_fct =
             new PosePriordx(nf_absfact.first->_T_n_f, nf_absfact.second.T, nf_absfact.second.inf);
 
-        problem.AddResidualBlock(cost_fct,
-                                 loss_function,
-                                 nf_pose_map.at(nf_absfact.second.nf).values());
+        problem.AddResidualBlock(cost_fct, loss_function, nf_pose_map.at(nf_absfact.second.nf).values());
     }
 
-    // Add absolute pose constraints
+    // Add absolute position constraints
     for (auto &nf_absfact : _nf_absfact_map) {
-        if (nf_pose_map.find(nf_absfact.first) == nf_pose_map.end())
+        if (nf_pose_map.find(nf_absfact.first) == nf_pose_map.end()) {
             nf_pose_map.emplace(nf_absfact.first, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
-        problem.AddParameterBlock(nf_pose_map.at(nf_absfact.first).values(), 6);
+            problem.AddParameterBlock(nf_pose_map.at(nf_absfact.first).values(), 6);
+        }
 
         ceres::CostFunction *cost_fct =
             new PositionPrior(nf_absfact.first->_T_n_f, nf_absfact.second.t, nf_absfact.second.inf);
@@ -37,12 +36,15 @@ void PoseGraph::solveGraph() {
     for (auto &nf_relfact : _nf_relfact_map) {
 
         // Check if the nf are not in the parameters
-        if (nf_pose_map.find(nf_relfact.second.nf_a) == nf_pose_map.end()) 
+        if (nf_pose_map.find(nf_relfact.second.nf_a) == nf_pose_map.end()) {
             nf_pose_map.emplace(nf_relfact.second.nf_a, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
-        
-        if (nf_pose_map.find(nf_relfact.second.nf_b) == nf_pose_map.end()) 
-            nf_pose_map.emplace(nf_relfact.second.nf_b, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+            problem.AddParameterBlock(nf_pose_map.at(nf_relfact.second.nf_a).values(), 6);
+        }
 
+        if (nf_pose_map.find(nf_relfact.second.nf_b) == nf_pose_map.end()) {
+            nf_pose_map.emplace(nf_relfact.second.nf_b, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+            problem.AddParameterBlock(nf_pose_map.at(nf_relfact.second.nf_b).values(), 6);
+        }
 
         Eigen::Affine3d T_n_a = nf_relfact.second.nf_a->_T_n_f;
         Eigen::Affine3d T_n_b = nf_relfact.second.nf_b->_T_n_f;
