@@ -15,8 +15,8 @@ double deg2rad = M_PI / 180;
 
 class Pipeline {
   public:
-    Pipeline(std::shared_ptr<isae::SLAMCore> slam, Eigen::Affine3d &T_a_f, double thresh_cov)
-        : _slam(slam), _T_a_f(T_a_f), _thresh_cov(thresh_cov) {
+    Pipeline(std::shared_ptr<isae::SLAMCore> slam, Eigen::Affine3d &T_a_f, double thresh_cov, uint window_size)
+        : _slam(slam), _T_a_f(T_a_f), _thresh_cov(thresh_cov), _window_size(window_size) {
 
         // Ellipsoid parameters of the WGS84 convention
         _a  = 6378137.0f;
@@ -48,9 +48,11 @@ class Pipeline {
     Eigen::Affine3d _T_n_w; // Rotation between ENU frame and SLAM (world) frame
     Eigen::Affine3d _T_a_f; // Transformation between antena and frame
     double _thresh_cov;     // Threshold on the covariance of GNSS estimates
-    Eigen::Vector3d _llh_ref, _ecef_ref; 
+    uint _window_size;      // Size of the sliding window
+    Eigen::Vector3d _llh_ref, _ecef_ref;
     std::queue<std::shared_ptr<NavFrame>> _nf_queue;
-    std::vector<std::shared_ptr<NavFrame>> _nav_frames;
+    std::deque<std::shared_ptr<NavFrame>> _nav_frames;
+    std::vector<Eigen::Affine3d> _removed_frame_poses, _removed_vo_poses;
     std::shared_ptr<NavFrame> _nf;
 };
 

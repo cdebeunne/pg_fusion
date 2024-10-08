@@ -36,9 +36,10 @@ int main(int argc, char **argv) {
     Eigen::Matrix4d M_a_f = Eigen::Map<Eigen::Affine3d::MatrixType>(&data_T[0], 4, 4).transpose();
     Eigen::Affine3d T_a_f(M_a_f);
     double thresh_cov = config["thresh_cov"].as<double>();
+    uint window_size = config["window_size"].as<uint>();
 
     // Create pipeline
-    std::shared_ptr<Pipeline> pipe = std::make_shared<Pipeline>(SLAM, T_a_f, thresh_cov);
+    std::shared_ptr<Pipeline> pipe = std::make_shared<Pipeline>(SLAM, T_a_f, thresh_cov, window_size);
 
     // Start the sensor subscriber
     std::shared_ptr<SensorSubscriber> sensor_subscriber =

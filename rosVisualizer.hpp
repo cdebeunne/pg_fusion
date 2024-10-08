@@ -118,7 +118,7 @@ class RosVisualizer : public rclcpp::Node {
         _pub_slam->publish(Twf_msg);
     }
 
-    void publishMap(const std::vector<std::shared_ptr<NavFrame>> nav_frames) {
+    void publishMap(std::shared_ptr<Pipeline> &pipe) {
 
         _traj_msg.header.stamp    = rclcpp::Node::now();
         _traj_msg.header.frame_id = "world";
@@ -129,7 +129,23 @@ class RosVisualizer : public rclcpp::Node {
         _traj_vo_msg.points.clear();
         geometry_msgs::msg::Point p, pvo;
 
-        for (auto &frame : nav_frames) {
+        for (auto &T_w_f : pipe->_removed_vo_poses) {
+            const Eigen::Vector3d twc = T_w_f.translation();
+            pvo.x                     = twc.x();
+            pvo.y                     = twc.y();
+            pvo.z                     = twc.z();
+            _traj_vo_msg.points.push_back(pvo);
+        }
+
+        for (auto &T_n_f : pipe->_removed_frame_poses) {
+            const Eigen::Vector3d tnc = T_n_f.translation();
+            p.x                       = tnc.x();
+            p.y                       = tnc.y();
+            p.z                       = tnc.z();
+            _traj_msg.points.push_back(p);
+        }
+
+        for (auto &frame : pipe->_nav_frames) {
             const Eigen::Vector3d tnc = frame->_T_n_f.translation();
             p.x                       = tnc.x();
             p.y                       = tnc.y();
@@ -155,7 +171,7 @@ class RosVisualizer : public rclcpp::Node {
             if (!pipe->_nav_frames.empty()) {
                 publishPose(pipe->_T_n_f);
                 publishFrame(pipe->_nav_frames.back());
-                publishMap(pipe->_nav_frames);
+                publishMap(pipe);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }

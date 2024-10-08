@@ -83,7 +83,6 @@ void Pipeline::init() {
     af.inf = Eigen::Matrix3d::Identity();
     af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
         std::sqrt(1 / _nf->_gnss_meas->cov(2));
-    af.inf *= 0.001;
     _pg->_nf_absfact_map.emplace(_nf, af);
 
     // Add to the nav frame vector
@@ -137,7 +136,7 @@ void Pipeline::step() {
         Eigen::Affine3d T_n_flast = _nav_frames.back()->_T_n_f;
         Eigen::Affine3d T_flast_f = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
         _T_n_f                    = T_n_flast * T_flast_f;
-        _nf->_T_n_f = _T_n_f;
+        _nf->_T_n_f               = _T_n_f;
     }
 
     // Compute position in the local frame
@@ -148,6 +147,7 @@ void Pipeline::step() {
 
     // Threshold on the covariance of the GNSS estimate
     if (_nf->_gnss_meas->cov.norm() < _thresh_cov) {
+
         // Set pose
         _nf->_T_n_f = T_n_f;
 
@@ -173,6 +173,28 @@ void Pipeline::step() {
 
     // Add to the nav frame vector
     _nav_frames.push_back(_nf);
+
+    // Sliding window
+    if (_pg->_nf_absfact_map.size() > _window_size) {
+
+        // Pop front until an absolute pose factor is marginalized
+        while (_pg->_nf_abspose_map.find(_nav_frames.front()) == _pg->_nf_abspose_map.end()) {
+            _removed_frame_poses.push_back(_nav_frames.front()->_T_n_f);
+            _removed_vo_poses.push_back(_nav_frames.front()->_T_w_f);
+            _pg->_nf_absfact_map.erase(_nav_frames.front());
+            _pg->_nf_relfact_map.erase(_nav_frames.front());
+            _pg->_nf_abspose_map.erase(_nav_frames.front());
+            _nav_frames.pop_front();
+        }
+
+        std::shared_ptr<NavFrame> first_nf = _nav_frames.front();
+        // add absolute pose contraint to fix the gauge
+        AbsolutePoseFactor ap;
+        ap.T   = first_nf->_T_n_f;
+        ap.nf  = first_nf;
+        ap.inf = 100 * Eigen::MatrixXd::Identity(6, 6);
+        _pg->_nf_abspose_map.emplace(first_nf, ap);
+    }
 
     // Solve pg
     if (_is_init) {
@@ -231,5 +253,7 @@ void Pipeline::calibrateRotation() {
     for (auto nf : _nav_frames) {
         nf->_T_w_f                            = _T_n_w * nf->_T_w_f;
         nf->_T_n_f.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
+        if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
+            _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
     }
 }
