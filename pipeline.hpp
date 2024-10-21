@@ -6,6 +6,8 @@
 #include <Eigen/Dense>
 #include <ceres/ceres.h>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <queue>
@@ -35,6 +37,7 @@ class Pipeline {
 
     std::shared_ptr<NavFrame> next();
     void calibrateRotation();
+    void profiler();
     void run();
     void init();
     void step();
@@ -52,7 +55,7 @@ class Pipeline {
     Eigen::Vector3d _llh_ref, _ecef_ref;
     std::queue<std::shared_ptr<NavFrame>> _nf_queue;
     std::deque<std::shared_ptr<NavFrame>> _nav_frames;
-    std::vector<Eigen::Affine3d> _removed_frame_poses, _removed_vo_poses;
+    std::vector<std::pair<unsigned long long, Eigen::Affine3d>> _removed_frame_poses, _removed_vo_poses;
     std::shared_ptr<NavFrame> _nf;
 };
 

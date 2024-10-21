@@ -61,6 +61,7 @@ void Pipeline::init() {
         _nf = next();
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
     }
+    _nf->_frame->setKeyFrame();
 
     // Get the ouput from the SLAM
     std::shared_ptr<isae::Frame> frame_ready = _slam->_frame_to_display;
@@ -78,9 +79,10 @@ void Pipeline::init() {
 
     // add absolute pose contraint
     AbsolutePositionFactor af;
-    af.t   = _nf->_T_n_f.translation();
-    af.nf  = _nf;
-    af.inf = Eigen::Matrix3d::Identity();
+    af.t    = _nf->_T_n_f.translation();
+    af.t(2) = 0; // Set the altitude to 0 as the estimate tend to drift
+    af.nf   = _nf;
+    af.inf  = Eigen::Matrix3d::Identity();
     af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
         std::sqrt(1 / _nf->_gnss_meas->cov(2));
     _pg->_nf_absfact_map.emplace(_nf, af);
@@ -118,6 +120,12 @@ void Pipeline::step() {
     std::shared_ptr<isae::Frame> frame_ready;
     while (_nf->_gnss_meas == nullptr) {
         _nf = next();
+
+        // Set KF if GNSS meas
+        if (_nf->_gnss_meas != nullptr && _nf->_frame->getSensors().size() != 0)
+            _nf->_frame->setKeyFrame();
+
+        // Send frame to the SLAM
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
 
         // Ignore if IMU only
@@ -153,9 +161,10 @@ void Pipeline::step() {
 
         // add absolute position contraint
         AbsolutePositionFactor af;
-        af.t   = _nf->_T_n_f.translation();
-        af.nf  = _nf;
-        af.inf = Eigen::Matrix3d::Identity();
+        af.t    = _nf->_T_n_f.translation();
+        af.t(2) = 0; // Set the altitude to 0 as the estimate tend to drift
+        af.nf   = _nf;
+        af.inf  = Eigen::Matrix3d::Identity();
         af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
             std::sqrt(1 / _nf->_gnss_meas->cov(2));
         af.inf *= 0.01;
@@ -179,8 +188,8 @@ void Pipeline::step() {
 
         // Pop front until an absolute pose factor is marginalized
         while (_pg->_nf_abspose_map.find(_nav_frames.front()) == _pg->_nf_abspose_map.end()) {
-            _removed_frame_poses.push_back(_nav_frames.front()->_T_n_f);
-            _removed_vo_poses.push_back(_nav_frames.front()->_T_w_f);
+            _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
+            _removed_vo_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_w_f});
             _pg->_nf_absfact_map.erase(_nav_frames.front());
             _pg->_nf_relfact_map.erase(_nav_frames.front());
             _pg->_nf_abspose_map.erase(_nav_frames.front());
@@ -199,6 +208,7 @@ void Pipeline::step() {
     // Solve pg
     if (_is_init) {
         _pg->solveGraph();
+        profiler();
     }
 }
 
@@ -256,4 +266,35 @@ void Pipeline::calibrateRotation() {
         if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
             _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
     }
+}
+
+void Pipeline::profiler() {
+
+    if (!std::filesystem::is_directory("log_pg"))
+        std::filesystem::create_directory("log_pg");
+
+    // Clean the result file
+    std::ofstream fw_res("log_pg/results.csv", std::ofstream::out | std::ofstream::trunc);
+    fw_res << "timestamp (ns), T_nf(00), T_nf(01), T_nf(02), T_nf(03), T_nf(10), T_nf(11), T_nf(12), "
+           << "T_nf(13), T_nf(20), T_nf(21), T_nf(22), T_nf(23)\n";
+
+    for (auto &ts_pose : _removed_frame_poses) {
+        Eigen::Affine3d T_n_f   = ts_pose.second;
+        const Eigen::Matrix3d R = T_n_f.linear();
+        Eigen::Vector3d tnf     = T_n_f.translation();
+        fw_res << ts_pose.first << "," << R(0, 0) << "," << R(0, 1) << "," << R(0, 2) << "," << tnf.x() << ","
+               << R(1, 0) << "," << R(1, 1) << "," << R(1, 2) << "," << tnf.y() << "," << R(2, 0) << "," << R(2, 1)
+               << "," << R(2, 2) << "," << tnf.z() << "\n";
+    }
+
+    for (auto &nf : _nav_frames) {
+        Eigen::Affine3d T_n_f   = nf->_T_n_f;
+        const Eigen::Matrix3d R = T_n_f.linear();
+        Eigen::Vector3d tnf     = T_n_f.translation();
+        fw_res << nf->_timestamp << "," << R(0, 0) << "," << R(0, 1) << "," << R(0, 2) << "," << tnf.x() << ","
+               << R(1, 0) << "," << R(1, 1) << "," << R(1, 2) << "," << tnf.y() << "," << R(2, 0) << "," << R(2, 1)
+               << "," << R(2, 2) << "," << tnf.z() << "\n";
+    }
+
+    fw_res.close();
 }

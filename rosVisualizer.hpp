@@ -129,7 +129,8 @@ class RosVisualizer : public rclcpp::Node {
         _traj_vo_msg.points.clear();
         geometry_msgs::msg::Point p, pvo;
 
-        for (auto &T_w_f : pipe->_removed_vo_poses) {
+        for (auto &ts_pose : pipe->_removed_vo_poses) {
+            Eigen::Affine3d T_w_f = ts_pose.second;
             const Eigen::Vector3d twc = T_w_f.translation();
             pvo.x                     = twc.x();
             pvo.y                     = twc.y();
@@ -137,7 +138,8 @@ class RosVisualizer : public rclcpp::Node {
             _traj_vo_msg.points.push_back(pvo);
         }
 
-        for (auto &T_n_f : pipe->_removed_frame_poses) {
+        for (auto &ts_pose : pipe->_removed_frame_poses) {
+            Eigen::Affine3d T_n_f = ts_pose.second;
             const Eigen::Vector3d tnc = T_n_f.translation();
             p.x                       = tnc.x();
             p.y                       = tnc.y();
