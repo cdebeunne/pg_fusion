@@ -57,6 +57,24 @@ void PoseGraph::solveGraph() {
                                  nf_pose_map.at(nf_relfact.second.nf_b).values());
     }
 
+    // Add the prior
+    std::vector<double *> prior_parameter_blocks;
+    for (auto &nf_prior : _prior->nf_idx_map) {
+
+        // Check if the nf are not in the parameters
+        if (nf_pose_map.find(nf_prior.first) == nf_pose_map.end()) {
+            nf_pose_map.emplace(nf_prior.first, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+            problem.AddParameterBlock(nf_pose_map.at(nf_prior.first).values(), 6);
+        }
+
+        prior_parameter_blocks.push_back(nf_pose_map.at(nf_prior.first).values());
+
+    }
+
+    ceres::CostFunction *cost_fct = new MarginalizationPrior(_prior->J, _prior->r, _prior->nf_idx_map);
+    problem.AddResidualBlock(cost_fct, loss_function, prior_parameter_blocks);
+
+
     // Solve the problem we just built
     ceres::Solver::Options options;
     options.trust_region_strategy_type         = ceres::LEVENBERG_MARQUARDT;
@@ -92,7 +110,10 @@ void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf) {
 
     // Set up blocks
     std::unordered_map<std::shared_ptr<NavFrame>, isae::PoseParametersBlock> nf_pose_map;
+    std::unordered_map<std::shared_ptr<NavFrame>, int> nf_idx_map;
     nf_pose_map.emplace(nf, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+    nf_idx_map.emplace(nf, 0);
+    int last_idx = 6;
 
     // Check if there is a position factor
     if (_nf_absfact_map.find(nf) != _nf_absfact_map.end()) {
@@ -123,4 +144,76 @@ void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf) {
         marg_sch.addMarginalizationBlock(
             std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
     }
+
+    // Check if there is a relative pose factor
+    for (auto nf_relfact : _nf_relfact_map) {
+        RelativePoseFactor relfact = nf_relfact.second;
+
+        if (relfact.nf_a == nf || relfact.nf_b == nf) {
+
+            // Check if the nf are not in the parameters
+            if (nf_pose_map.find(relfact.nf_a) == nf_pose_map.end()) {
+                nf_pose_map.emplace(relfact.nf_a, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+                nf_idx_map.emplace(relfact.nf_a, last_idx);
+                last_idx += 6;
+                marg_sch._n += 6;
+            }
+
+            if (nf_pose_map.find(relfact.nf_b) == nf_pose_map.end()) {
+                nf_pose_map.emplace(relfact.nf_b, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+                nf_idx_map.emplace(relfact.nf_b, last_idx);
+                last_idx += 6;
+                marg_sch._n += 6;
+            }
+
+            Eigen::Affine3d T_n_a         = relfact.nf_a->_T_n_f;
+            Eigen::Affine3d T_n_b         = relfact.nf_b->_T_n_f;
+            ceres::CostFunction *cost_fct = new Relative6DPose(T_n_a, T_n_b, relfact.T_a_b, relfact.inf);
+
+            std::vector<double *> parameter_blocks;
+            std::vector<int> parameter_idx;
+
+            parameter_idx.push_back(nf_idx_map.at(relfact.nf_a));
+            parameter_idx.push_back(nf_idx_map.at(relfact.nf_b));
+            parameter_blocks.push_back(nf_pose_map.at(relfact.nf_a).values());
+            parameter_blocks.push_back(nf_pose_map.at(relfact.nf_b).values());
+
+            marg_sch.addMarginalizationBlock(
+                std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
+        }
+    }
+
+    // Add prior factor
+    std::vector<double *> parameter_blocks;
+    std::vector<int> parameter_idx;
+    for (auto &nf_prior : _prior->nf_idx_map) {
+
+        // Check if the nf are not in the parameters
+        if (nf_pose_map.find(nf_prior.first) == nf_pose_map.end()) {
+            nf_pose_map.emplace(nf_prior.first, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+            nf_idx_map.emplace(nf_prior.first, last_idx);
+            last_idx += 6;
+            marg_sch._n += 6;
+        }
+
+        parameter_idx.push_back(nf_idx_map.at(nf_prior.first));
+        parameter_blocks.push_back(nf_pose_map.at(nf_prior.first).values());
+    }
+    ceres::CostFunction *cost_fct = new MarginalizationPrior(_prior->J, _prior->r, _prior->nf_idx_map);
+    marg_sch.addMarginalizationBlock(
+        std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
+
+    // Compute the prior
+    marg_sch.computeSchurComplement();
+    marg_sch.computeJacobiansAndResiduals();
+
+    // Clean the maps
+    _nf_absfact_map.erase(nf);
+    _nf_relfact_map.erase(nf);
+    _nf_abspose_map.erase(nf);
+
+    // Update the prior
+    _prior->J = marg_sch._marginalization_jacobian;
+    _prior->r = marg_sch._marginalization_residual;
+    _prior->nf_idx_map = nf_idx_map;
 }
