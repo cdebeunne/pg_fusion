@@ -37,6 +37,7 @@ public:
   PoseGraph() {};
 
   void solveGraph();
+  void marginalize(std::shared_ptr<NavFrame> nf);
 
   std::unordered_map<std::shared_ptr<NavFrame>, AbsolutePoseFactor> _nf_abspose_map;
   std::unordered_map<std::shared_ptr<NavFrame>, AbsolutePositionFactor> _nf_absfact_map;

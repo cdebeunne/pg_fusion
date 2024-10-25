@@ -78,3 +78,49 @@ void PoseGraph::solveGraph() {
         nf_pose.first->_T_n_f  = T_init * nf_pose.second.getPose();
     }
 }
+
+void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf) {
+
+    // Create a marginalization scheme
+    isae::Marginalization marg_sch;
+    marg_sch._m = 6;
+    marg_sch._n = 6;
+
+    // Set up variables
+    Eigen::MatrixXd lambda = Eigen::MatrixXd::Zero(12, 12);
+    Eigen::VectorXd g      = Eigen::VectorXd::Zero(6);
+
+    // Set up blocks
+    std::unordered_map<std::shared_ptr<NavFrame>, isae::PoseParametersBlock> nf_pose_map;
+    nf_pose_map.emplace(nf, isae::PoseParametersBlock(Eigen::Affine3d::Identity()));
+
+    // Check if there is a position factor
+    if (_nf_absfact_map.find(nf) != _nf_absfact_map.end()) {
+        AbsolutePositionFactor nf_absfact = _nf_absfact_map.at(nf);
+
+        std::vector<double *> parameter_blocks;
+        std::vector<int> parameter_idx;
+
+        parameter_idx.push_back(0);
+        parameter_blocks.push_back(nf_pose_map.at(nf).values());
+
+        ceres::CostFunction *cost_fct = new PositionPrior(nf->_T_n_f, nf_absfact.t, nf_absfact.inf);
+        marg_sch.addMarginalizationBlock(
+            std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
+    }
+
+    // Check if there is a position factor
+    if (_nf_abspose_map.find(nf) != _nf_abspose_map.end()) {
+        AbsolutePoseFactor nf_abspose = _nf_abspose_map.at(nf);
+
+        std::vector<double *> parameter_blocks;
+        std::vector<int> parameter_idx;
+
+        parameter_idx.push_back(0);
+        parameter_blocks.push_back(nf_pose_map.at(nf).values());
+
+        ceres::CostFunction *cost_fct = new PosePriordx(nf->_T_n_f, nf_abspose.T, nf_abspose.inf);
+        marg_sch.addMarginalizationBlock(
+            std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
+    }
+}
