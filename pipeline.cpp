@@ -78,14 +78,11 @@ void Pipeline::init() {
     _nf->_T_n_f           = T_n_a * _T_a_f;
 
     // add absolute pose contraint
-    AbsolutePositionFactor af;
-    af.t    = _nf->_T_n_f.translation();
-    af.t(2) = 0; // Set the altitude to 0 as the estimate tend to drift
+    AbsolutePoseFactor af;
+    af.T    = _nf->_T_n_f;
     af.nf   = _nf;
-    af.inf  = Eigen::Matrix3d::Identity();
-    af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
-        std::sqrt(1 / _nf->_gnss_meas->cov(2));
-    _pg->_nf_absfact_map.emplace(_nf, af);
+    af.inf  = 100 * Eigen::MatrixXd::Identity(6,6);
+    _pg->_nf_abspose_map.emplace(_nf, af);
 
     // Add to the nav frame vector
     _nav_frames.push_back(_nf);
@@ -100,13 +97,6 @@ void Pipeline::init() {
     // Then compute the yaw between ENU and W
     // and update the poses
     calibrateRotation();
-
-    // add absolute pose contraint to fix the gauge
-    AbsolutePoseFactor ap;
-    ap.T   = _nf->_T_n_f;
-    ap.nf  = _nf;
-    ap.inf = 100 * Eigen::MatrixXd::Identity(6, 6);
-    _pg->_nf_abspose_map.emplace(_nf, ap);
 
     _is_init = true;
 }
@@ -186,23 +176,19 @@ void Pipeline::step() {
     // Sliding window
     if (_pg->_nf_absfact_map.size() > _window_size) {
 
-        // Pop front until an absolute pose factor is marginalized
-        while (_pg->_nf_abspose_map.find(_nav_frames.front()) == _pg->_nf_abspose_map.end()) {
+        // Pop front until an absolute position factor is marginalized
+        while (_pg->_nf_absfact_map.find(_nav_frames.front()) == _pg->_nf_absfact_map.end()) {
             _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
             _removed_vo_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_w_f});
-            _pg->_nf_absfact_map.erase(_nav_frames.front());
-            _pg->_nf_relfact_map.erase(_nav_frames.front());
-            _pg->_nf_abspose_map.erase(_nav_frames.front());
+            _pg->marginalize(_nav_frames.front());
             _nav_frames.pop_front();
         }
 
-        std::shared_ptr<NavFrame> first_nf = _nav_frames.front();
-        // add absolute pose contraint to fix the gauge
-        AbsolutePoseFactor ap;
-        ap.T   = first_nf->_T_n_f;
-        ap.nf  = first_nf;
-        ap.inf = 100 * Eigen::MatrixXd::Identity(6, 6);
-        _pg->_nf_abspose_map.emplace(first_nf, ap);
+        // Marginalize 
+        _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
+        _removed_vo_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_w_f});
+        _pg->marginalize(_nav_frames.front());
+        _nav_frames.pop_front();
     }
 
     // Solve pg

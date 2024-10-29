@@ -252,9 +252,10 @@ class MarginalizationPrior : public ceres::CostFunction {
         dx.setZero();
 
         // Add frame dx
-
+        int block_idx = 0;
         for (auto &nf_idx : _nf_idx_map) {
-            dx.segment<6>(nf_idx.second) = Eigen::Map<const Eigen::Matrix<double, 6, 1>>(parameters[nf_idx.second]);
+            dx.segment<6>(nf_idx.second) = Eigen::Map<const Eigen::Matrix<double, 6, 1>>(parameters[block_idx]);
+            block_idx++;
         }
 
         // Compute the residual
@@ -263,13 +264,17 @@ class MarginalizationPrior : public ceres::CostFunction {
         // Fill the jacobians
         if (jacobians) {
 
+            block_idx = 0;
             // Jacobians on frame
             for (auto &nf_idx : _nf_idx_map) {
 
-                Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> jacobian(
-                    jacobians[nf_idx.second], n, 6);
-                jacobian.setZero();
-                jacobian.leftCols(6) = _J.middleCols(nf_idx.second, 6);
+                if (jacobians[block_idx]) {
+                    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> jacobian(
+                        jacobians[block_idx], n, 6);
+                    jacobian.setZero();
+                    jacobian = _J.block(0, nf_idx.second, n, 6);
+                }
+                block_idx++;
             }
         }
         return true;
