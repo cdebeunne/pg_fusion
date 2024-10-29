@@ -79,9 +79,9 @@ void Pipeline::init() {
 
     // add absolute pose contraint
     AbsolutePoseFactor af;
-    af.T    = _nf->_T_n_f;
-    af.nf   = _nf;
-    af.inf  = 100 * Eigen::MatrixXd::Identity(6,6);
+    af.T   = _nf->_T_n_f;
+    af.nf  = _nf;
+    af.inf = 100 * Eigen::MatrixXd::Identity(6, 6);
     _pg->_nf_abspose_map.emplace(_nf, af);
 
     // Add to the nav frame vector
@@ -184,7 +184,7 @@ void Pipeline::step() {
             _nav_frames.pop_front();
         }
 
-        // Marginalize 
+        // Marginalize
         _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
         _removed_vo_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_w_f});
         _pg->marginalize(_nav_frames.front());
@@ -193,6 +193,7 @@ void Pipeline::step() {
 
     // Solve pg
     if (_is_init) {
+        updateRelativeFactors();
         _pg->solveGraph();
         profiler();
     }
@@ -246,12 +247,28 @@ void Pipeline::calibrateRotation() {
     _T_n_w.affine().block(0, 0, 3, 3) << std::cos(theta[0]), -std::sin(theta[0]), 0, std::sin(theta[0]),
         std::cos(theta[0]), 0, 0, 0, 1;
 
-    for (auto nf : _nav_frames) {
+    for (auto &nf : _nav_frames) {
         nf->_T_w_f                            = _T_n_w * nf->_T_w_f;
         nf->_T_n_f.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
         if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
             _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
     }
+}
+
+void Pipeline::updateRelativeFactors() {
+
+    // Parse every relative factor
+    for (auto nf_relfact : _pg->_nf_relfact_map) {
+
+        // Compute the updated delta pose
+        Eigen::Affine3d T_a_b_updated = nf_relfact.second.nf_a->_frame->getWorld2FrameTransform() *
+                                        nf_relfact.second.nf_b->_frame->getFrame2WorldTransform();
+        
+        // Update the factor
+        nf_relfact.second.T_a_b = T_a_b_updated;
+
+    }
+
 }
 
 void Pipeline::profiler() {

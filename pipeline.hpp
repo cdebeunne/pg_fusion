@@ -37,6 +37,7 @@ class Pipeline {
 
     std::shared_ptr<NavFrame> next();
     void calibrateRotation();
+    void updateRelativeFactors();
     void profiler();
     void run();
     void init();
