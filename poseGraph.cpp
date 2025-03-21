@@ -232,7 +232,6 @@ void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf) {
     for (auto &nf_idx : nf_idx_map) {
         if (nf_idx.second >= marg_sch._m) {
             nf_idx_map_up.emplace(nf_idx.first, nf_idx.second - marg_sch._m);
-            std::cout << nf_idx.second - marg_sch._m << std::endl;
         }
     }
 

@@ -137,6 +137,49 @@ class OrientationCalib2D : public ceres::SizedCostFunction<2, 1> {
     Eigen::Matrix2d _sqrt_inf;
 };
 
+class OrientationCalib4DoF : public ceres::SizedCostFunction<3, 1, 3> {
+  public:
+    OrientationCalib4DoF(const Eigen::Vector3d t_w_f, const Eigen::Vector3d t_e_f, const Eigen::Matrix3d sqrt_inf)
+        : _t_w_f(t_w_f), _t_e_f(t_e_f), _sqrt_inf(sqrt_inf) {}
+    OrientationCalib4DoF() {}
+
+    virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const {
+
+        Eigen::Map<Eigen::Vector3d> err(residuals);
+        double theta = parameters[0][0];
+        double tx    = parameters[1][0];
+        double ty    = parameters[1][1];
+        double tz    = parameters[1][2];
+
+        Eigen::Vector3d t_e_f_est;
+        t_e_f_est << std::cos(theta) * _t_w_f(0) - std::sin(theta) * _t_w_f(1) + tx,
+            std::sin(theta) * _t_w_f(0) + std::cos(theta) * _t_w_f(1) + ty, _t_w_f(2) +  tz;
+
+        err = _sqrt_inf * (t_e_f_est - _t_e_f);
+
+        if (jacobians != NULL) {
+
+            if (jacobians[0] != NULL) {
+                Eigen::Map<Eigen::Vector3d> J_theta(jacobians[0]);
+                Eigen::Matrix3d Rd;
+                Rd << -std::sin(theta), -std::cos(theta), 0, std::cos(theta), -std::sin(theta), 0, 0, 0, 1;
+                J_theta = _sqrt_inf * Rd * _t_w_f;
+            }
+
+            if (jacobians[1] != NULL) {
+                Eigen::Map<Eigen::Matrix3d> J_t(jacobians[1]);
+                J_t.setIdentity();
+                J_t = _sqrt_inf * J_t;
+            }
+        }
+
+        return true;
+    }
+
+    Eigen::Vector3d _t_w_f, _t_e_f;
+    Eigen::Matrix3d _sqrt_inf;
+};
+
 class OrientationCalib : public ceres::SizedCostFunction<3, 3> {
   public:
     OrientationCalib(const Eigen::Vector3d t_w_f, const Eigen::Vector3d t_e_f, const Eigen::Matrix3d sqrt_inf)

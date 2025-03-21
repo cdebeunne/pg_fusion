@@ -1,4 +1,5 @@
 #include "pipeline.hpp"
+#include "isaeslam/optimizers/AngularAdjustmentCERESAnalytic.h"
 
 const Eigen::Vector3d Pipeline::llhToEcef(const Eigen::Vector3d &llh) {
     double Sp = std::sin(llh.x() * deg2rad);
@@ -62,7 +63,7 @@ void Pipeline::init() {
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
     }
     _nf->_frame->setKeyFrame();
-
+    
     // Get the ouput from the SLAM
     std::shared_ptr<isae::Frame> frame_ready = _slam->_frame_to_display;
     while (frame_ready != _nf->_frame) {
@@ -96,7 +97,7 @@ void Pipeline::init() {
 
     // Then compute the yaw between ENU and W
     // and update the poses
-    calibrateRotation();
+    calibrateRotation4DoF();
 
     _is_init = true;
 }
@@ -155,19 +156,32 @@ void Pipeline::step() {
         af.t(2) = 0; // Set the altitude to 0 as the estimate tend to drift
         af.nf   = _nf;
         af.inf  = Eigen::Matrix3d::Identity();
-        af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
+        if (_nf->_gnss_meas->cov.norm() > 1e-4) {
+            af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
             std::sqrt(1 / _nf->_gnss_meas->cov(2));
-        af.inf *= 0.01;
+            af.inf *= 0.1;
+        } else {
+            af.inf(2, 2) = 1;
+        }
+
         _pg->_nf_absfact_map.emplace(_nf, af);
     }
 
     // add relative pose constraints
     RelativePoseFactor rf;
-    rf.nf_a                  = _nav_frames.back();
-    rf.nf_b                  = _nf;
-    rf.T_a_b                 = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
-    rf.inf                   = Eigen::MatrixXd::Identity(6, 6);
-    rf.inf.block(3, 3, 3, 3) = Eigen::Matrix3d::Identity(); // cm accuracy
+    rf.nf_a  = _nav_frames.back();
+    rf.nf_b  = _nf;
+    rf.T_a_b = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
+    Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(6,6);
+    _slam->_local_map_to_display->computeRelativePose(_nav_frames.back()->_frame, _nf->_frame, rf.T_a_b, cov);
+
+    // Compute the information matrix
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(cov);
+    Eigen::VectorXd S      = Eigen::VectorXd((saes.eigenvalues().array() > 1e-8).select(saes.eigenvalues().array().inverse(), 0));
+    Eigen::VectorXd S_sqrt = S.cwiseSqrt();
+    Eigen::MatrixXd inf_sqrt = saes.eigenvectors() * S_sqrt.asDiagonal() * saes.eigenvectors().transpose();
+    rf.inf                   = inf_sqrt.diagonal().asDiagonal();
+    
     _pg->_nf_relfact_map.emplace(_nf, rf);
 
     // Add to the nav frame vector
@@ -255,6 +269,58 @@ void Pipeline::calibrateRotation() {
     }
 }
 
+void Pipeline::calibrateRotation4DoF() {
+
+    // Build the ceres problem
+    ceres::Problem problem;
+    ceres::LossFunction *loss_function = nullptr;
+
+    double theta[1] = {0.0};
+    problem.AddParameterBlock(theta, 1);
+    isae::PointXYZParametersBlock dt(Eigen::Vector3d::Zero());
+    problem.AddParameterBlock(dt.values(), 3);
+
+    // Add all constraints
+    for (auto &nf : _nav_frames) {
+        ceres::CostFunction *cost_fct =
+            new OrientationCalib4DoF(nf->_T_w_f.translation(), nf->_T_n_f.translation(), Eigen::Matrix3d::Identity());
+
+        problem.AddResidualBlock(cost_fct, loss_function, theta, dt.values());
+    }
+
+    // Solve the problem we just built
+    ceres::Solver::Options options;
+    options.trust_region_strategy_type         = ceres::LEVENBERG_MARQUARDT;
+    options.linear_solver_type                 = ceres::SPARSE_NORMAL_CHOLESKY;
+    options.max_num_iterations                 = 40;
+    options.minimizer_progress_to_stdout       = false;
+    options.use_explicit_schur_complement      = true;
+    options.function_tolerance                 = 1e-3;
+    options.sparse_linear_algebra_library_type = ceres::SUITE_SPARSE;
+    options.num_threads                        = 4;
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+
+    std::cout << summary.FullReport() << std::endl;
+
+    // Update the parameter and the poses
+    _T_n_w = Eigen::Affine3d::Identity();
+    _T_n_w.matrix() << std::cos(theta[0]), -std::sin(theta[0]), 0, dt.getPose().translation().x(),
+    std::sin(theta[0]), std::cos(theta[0]), 0, dt.getPose().translation().y(),
+    0, 0, 1, dt.getPose().translation().z(),
+    0, 0, 0, 1;
+
+    for (auto &nf : _nav_frames) {
+        nf->_T_w_f                            = _T_n_w * nf->_T_w_f;
+        nf->_T_n_f.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
+        if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
+            _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
+    }
+
+    std::cout << "Theta: " << theta[0] << std::endl;
+    std::cout << "dt: " << dt.getPose().translation().transpose() << std::endl;
+}
+
 void Pipeline::updateRelativeFactors() {
 
     // Parse every relative factor
@@ -263,12 +329,10 @@ void Pipeline::updateRelativeFactors() {
         // Compute the updated delta pose
         Eigen::Affine3d T_a_b_updated = nf_relfact.second.nf_a->_frame->getWorld2FrameTransform() *
                                         nf_relfact.second.nf_b->_frame->getFrame2WorldTransform();
-        
+
         // Update the factor
         nf_relfact.second.T_a_b = T_a_b_updated;
-
     }
-
 }
 
 void Pipeline::profiler() {
