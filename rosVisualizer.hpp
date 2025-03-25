@@ -89,7 +89,7 @@ class RosVisualizer : public rclcpp::Node {
 
         // Deal with position
         geometry_msgs::msg::Point p;
-        Eigen::Vector3d tnf   = pipe->_T_n_w * frame->_T_w_f.translation();
+        Eigen::Vector3d tnf   = frame->_T_n_w * frame->_T_w_f.translation();
         p.x                   = tnf.x();
         p.y                   = tnf.y();
         p.z                   = tnf.z();
@@ -97,7 +97,7 @@ class RosVisualizer : public rclcpp::Node {
 
         // Deal with orientation
         geometry_msgs::msg::Quaternion q;
-        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)(pipe->_T_n_w.linear() * frame->_T_w_f.linear());
+        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)(frame->_T_n_w.linear() * frame->_T_w_f.linear());
         q.x                        = eigen_q.x();
         q.y                        = eigen_q.y();
         q.z                        = eigen_q.z();
@@ -131,8 +131,8 @@ class RosVisualizer : public rclcpp::Node {
         geometry_msgs::msg::Point p, pvo;
 
         for (auto &ts_pose : pipe->_removed_vo_poses) {
-            Eigen::Affine3d T_w_f = ts_pose.second;
-            const Eigen::Vector3d twc = pipe->_T_n_w * T_w_f.translation();
+            Eigen::Affine3d T_n_f = ts_pose.second;
+            const Eigen::Vector3d twc = T_n_f.translation();
             pvo.x                     = twc.x();
             pvo.y                     = twc.y();
             pvo.z                     = twc.z();
@@ -155,7 +155,7 @@ class RosVisualizer : public rclcpp::Node {
             p.z                       = tnc.z();
             _traj_msg.points.push_back(p);
 
-            const Eigen::Vector3d twc = pipe->_T_n_w * frame->_T_w_f.translation();
+            const Eigen::Vector3d twc = frame->_T_n_w * frame->_T_w_f.translation();
             pvo.x                     = twc.x();
             pvo.y                     = twc.y();
             pvo.z                     = twc.z();

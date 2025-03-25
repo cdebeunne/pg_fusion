@@ -63,7 +63,7 @@ void Pipeline::init() {
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
     }
     _nf->_frame->setKeyFrame();
-    
+
     // Get the ouput from the SLAM
     std::shared_ptr<isae::Frame> frame_ready = _slam->_frame_to_display;
     while (frame_ready != _nf->_frame) {
@@ -154,10 +154,10 @@ void Pipeline::step() {
 
         // add absolute position contraint
         AbsolutePositionFactor af;
-        af.t    = T_n_f.translation();
+        af.t = T_n_f.translation();
         // af.t(2) = 0; // Set the altitude to 0 as the estimate tend to drift
-        af.nf   = _nf;
-        af.inf  = Eigen::Matrix3d::Identity();
+        af.nf  = _nf;
+        af.inf = Eigen::Matrix3d::Identity();
         if (_nf->_gnss_meas->cov.norm() > 1e-4) {
             af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
                 std::sqrt(1 / _nf->_gnss_meas->cov(2));
@@ -169,8 +169,15 @@ void Pipeline::step() {
         _pg->_nf_absfact_map.emplace(_nf, af);
     }
 
-    // add relative pose constraints if the VIO is accurate
+    // add relative pose constraints if the VIO is initialized
     if (_slam->_is_init) {
+
+        // If the system is init and the SLAM is init the frame is aligned
+        if (_is_init) {
+            _nf->_is_aligned = true;
+            _nf->_T_n_w      = _T_n_w;
+        }
+
         RelativePoseFactor rf;
         rf.nf_a             = _nav_frames.back();
         rf.nf_b             = _nf;
@@ -187,6 +194,10 @@ void Pipeline::step() {
         rf.inf                   = inf_sqrt.diagonal().asDiagonal();
 
         _pg->_nf_relfact_map.emplace(_nf, rf);
+    } else // If the slam is not init, the system needs to re align
+    {
+        _is_init         = false;
+        _nf->_is_aligned = false;
     }
 
     // Add to the nav frame vector
@@ -198,14 +209,15 @@ void Pipeline::step() {
         // Pop front until an absolute position factor is marginalized
         while (_pg->_nf_absfact_map.find(_nav_frames.front()) == _pg->_nf_absfact_map.end()) {
             _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
-            _removed_vo_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_w_f});
+            _removed_vo_poses.push_back(
+                {_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_w * _nav_frames.front()->_T_w_f});
             _pg->marginalize(_nav_frames.front());
             _nav_frames.pop_front();
         }
 
         // Marginalize
         _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
-        _removed_vo_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_w_f});
+        _removed_vo_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_w * _nav_frames.front()->_T_w_f});
         _pg->marginalize(_nav_frames.front());
         _nav_frames.pop_front();
     }
@@ -240,10 +252,12 @@ void Pipeline::calibrateRotation() {
 
     // Add all constraints
     for (auto &nf : _nav_frames) {
-        ceres::CostFunction *cost_fct =
-            new OrientationCalib2D(nf->_T_w_f.translation(), nf->_T_n_f.translation(), Eigen::Matrix2d::Identity());
+        if (!nf->_is_aligned) {
+            ceres::CostFunction *cost_fct =
+                new OrientationCalib2D(nf->_T_w_f.translation(), nf->_T_n_f.translation(), Eigen::Matrix2d::Identity());
 
-        problem.AddResidualBlock(cost_fct, loss_function, theta);
+            problem.AddResidualBlock(cost_fct, loss_function, theta);
+        }
     }
 
     // Solve the problem we just built
@@ -267,9 +281,13 @@ void Pipeline::calibrateRotation() {
         std::cos(theta[0]), 0, 0, 0, 1;
 
     for (auto &nf : _nav_frames) {
-        nf->_T_n_f.affine().block(0, 0, 3, 3) = _T_n_w.rotation() * nf->_T_w_f.rotation();
-        if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
-            _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_n_f.rotation();
+        if (!nf->_is_aligned) {
+            nf->_T_n_f.affine().block(0, 0, 3, 3) = _T_n_w.rotation() * nf->_T_w_f.rotation();
+            if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
+                _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_n_f.rotation();
+            nf->_is_aligned = true;
+            nf->_T_n_w      = _T_n_w;
+        }
     }
 }
 
@@ -284,12 +302,14 @@ void Pipeline::calibrateRotation4DoF() {
     isae::PointXYZParametersBlock dt(Eigen::Vector3d::Zero());
     problem.AddParameterBlock(dt.values(), 3);
 
-    // Add all constraints
+    // Add all constraints on non aligned frames
     for (auto &nf : _nav_frames) {
-        ceres::CostFunction *cost_fct =
-            new OrientationCalib4DoF(nf->_T_w_f.translation(), nf->_T_n_f.translation(), Eigen::Matrix3d::Identity());
+        if (!nf->_is_aligned) {
+            ceres::CostFunction *cost_fct = new OrientationCalib4DoF(
+                nf->_T_w_f.translation(), nf->_T_n_f.translation(), Eigen::Matrix3d::Identity());
 
-        problem.AddResidualBlock(cost_fct, loss_function, theta, dt.values());
+            problem.AddResidualBlock(cost_fct, loss_function, theta, dt.values());
+        }
     }
 
     // Solve the problem we just built
@@ -313,9 +333,13 @@ void Pipeline::calibrateRotation4DoF() {
         std::cos(theta[0]), 0, dt.getPose().translation().y(), 0, 0, 1, dt.getPose().translation().z(), 0, 0, 0, 1;
 
     for (auto &nf : _nav_frames) {
-        nf->_T_n_f = _T_n_w * nf->_T_w_f;
-        if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
-            _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_n_f.rotation();
+        if (!nf->_is_aligned) {
+            nf->_T_n_f = _T_n_w * nf->_T_w_f;
+            if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
+                _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_n_f.rotation();
+            nf->_is_aligned = true;
+            nf->_T_n_w      = _T_n_w;
+        }
     }
 
     std::cout << "Theta: " << theta[0] << std::endl;
@@ -333,6 +357,10 @@ void Pipeline::updateRelativeFactors() {
 
         // Update the factor
         nf_relfact.second.T_a_b = T_a_b_updated;
+
+        // Update the pose
+        nf_relfact.second.nf_a->_T_w_f = nf_relfact.second.nf_a->_frame->getFrame2WorldTransform();
+        nf_relfact.second.nf_b->_T_w_f = nf_relfact.second.nf_b->_frame->getFrame2WorldTransform();
     }
 }
 

@@ -16,19 +16,27 @@ class NavFrame {
   public:
     NavFrame(){};
     NavFrame(std::shared_ptr<GNSSMeas> gnss_meas, unsigned long long timestamp)
-        : _gnss_meas(gnss_meas), _timestamp(timestamp){};
+        : _gnss_meas(gnss_meas), _timestamp(timestamp) {
+        _is_aligned = false;
+        _T_n_w = Eigen::Affine3d::Identity();
+    };
     NavFrame(std::shared_ptr<isae::Frame> frame) : _frame(frame) {
-        _timestamp = _frame->getTimestamp();
-        _gnss_meas = nullptr;
+        _timestamp  = _frame->getTimestamp();
+        _gnss_meas  = nullptr;
+        _is_aligned = false;
+        _T_n_w = Eigen::Affine3d::Identity();
     };
     NavFrame(std::shared_ptr<isae::Frame> frame, std::shared_ptr<GNSSMeas> gnss_meas)
         : _frame(frame), _gnss_meas(gnss_meas) {
-        _timestamp = _frame->getTimestamp();
+        _timestamp  = _frame->getTimestamp();
+        _is_aligned = false;
+        _T_n_w = Eigen::Affine3d::Identity();
     };
 
     std::shared_ptr<isae::Frame> _frame;
     std::shared_ptr<GNSSMeas> _gnss_meas;
-    Eigen::Affine3d _T_n_f, _T_w_f;
+    Eigen::Affine3d _T_n_f, _T_w_f, _T_n_w;
+    bool _is_aligned;
     unsigned long long _timestamp;
 };
 
