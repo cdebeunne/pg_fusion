@@ -80,7 +80,8 @@ class RosVisualizer : public rclcpp::Node {
         _pub_pose->publish(Tnf_msg);
     }
 
-    void publishFrame(const std::shared_ptr<NavFrame> frame) {
+    void publishFrame(std::shared_ptr<Pipeline> &pipe) {
+        std::shared_ptr<NavFrame> frame = pipe->_nav_frames.back();
 
         geometry_msgs::msg::PoseStamped Twf_msg;
         Twf_msg.header.stamp    = rclcpp::Time(frame->_timestamp);
@@ -88,15 +89,15 @@ class RosVisualizer : public rclcpp::Node {
 
         // Deal with position
         geometry_msgs::msg::Point p;
-        Eigen::Vector3d twf   = frame->_T_w_f.translation();
-        p.x                   = twf.x();
-        p.y                   = twf.y();
-        p.z                   = twf.z();
+        Eigen::Vector3d tnf   = pipe->_T_n_w * frame->_T_w_f.translation();
+        p.x                   = tnf.x();
+        p.y                   = tnf.y();
+        p.z                   = tnf.z();
         Twf_msg.pose.position = p;
 
         // Deal with orientation
         geometry_msgs::msg::Quaternion q;
-        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)frame->_T_w_f.linear();
+        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)(pipe->_T_n_w.linear() * frame->_T_w_f.linear());
         q.x                        = eigen_q.x();
         q.y                        = eigen_q.y();
         q.z                        = eigen_q.z();
@@ -104,15 +105,15 @@ class RosVisualizer : public rclcpp::Node {
         Twf_msg.pose.orientation   = q;
 
         // Publish transform
-        geometry_msgs::msg::TransformStamped Twf_tf;
-        Twf_tf.header.stamp            = rclcpp::Time(frame->_timestamp);
-        Twf_tf.header.frame_id         = "world";
-        Twf_tf.child_frame_id          = "slam";
-        Twf_tf.transform.translation.x = twf.x();
-        Twf_tf.transform.translation.y = twf.y();
-        Twf_tf.transform.translation.z = twf.z();
-        Twf_tf.transform.rotation      = Twf_msg.pose.orientation;
-        _tf_broadcaster->sendTransform(Twf_tf);
+        geometry_msgs::msg::TransformStamped Tnf_tf;
+        Tnf_tf.header.stamp            = rclcpp::Time(frame->_timestamp);
+        Tnf_tf.header.frame_id         = "world";
+        Tnf_tf.child_frame_id          = "slam";
+        Tnf_tf.transform.translation.x = tnf.x();
+        Tnf_tf.transform.translation.y = tnf.y();
+        Tnf_tf.transform.translation.z = tnf.z();
+        Tnf_tf.transform.rotation      = Twf_msg.pose.orientation;
+        _tf_broadcaster->sendTransform(Tnf_tf);
 
         // publish messages
         _pub_slam->publish(Twf_msg);
@@ -131,7 +132,7 @@ class RosVisualizer : public rclcpp::Node {
 
         for (auto &ts_pose : pipe->_removed_vo_poses) {
             Eigen::Affine3d T_w_f = ts_pose.second;
-            const Eigen::Vector3d twc = T_w_f.translation();
+            const Eigen::Vector3d twc = pipe->_T_n_w * T_w_f.translation();
             pvo.x                     = twc.x();
             pvo.y                     = twc.y();
             pvo.z                     = twc.z();
@@ -154,7 +155,7 @@ class RosVisualizer : public rclcpp::Node {
             p.z                       = tnc.z();
             _traj_msg.points.push_back(p);
 
-            const Eigen::Vector3d twc = frame->_T_w_f.translation();
+            const Eigen::Vector3d twc = pipe->_T_n_w * frame->_T_w_f.translation();
             pvo.x                     = twc.x();
             pvo.y                     = twc.y();
             pvo.z                     = twc.z();
@@ -172,7 +173,7 @@ class RosVisualizer : public rclcpp::Node {
 
             if (!pipe->_nav_frames.empty()) {
                 publishPose(pipe->_T_n_f);
-                publishFrame(pipe->_nav_frames.back());
+                publishFrame(pipe);
                 publishMap(pipe);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));

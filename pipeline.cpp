@@ -129,7 +129,7 @@ void Pipeline::step() {
             frame_ready = _slam->_frame_to_display;
         }
 
-        _nf->_T_w_f = _T_n_w * frame_ready->getFrame2WorldTransform();
+        _nf->_T_w_f = frame_ready->getFrame2WorldTransform();
 
         // Compute the current pose
         Eigen::Affine3d T_n_flast = _nav_frames.back()->_T_n_f;
@@ -142,23 +142,25 @@ void Pipeline::step() {
     Eigen::Vector3d t_n_a            = ecefToENU(llhToEcef(_nf->_gnss_meas->llh_meas));
     Eigen::Affine3d T_n_f            = Eigen::Affine3d::Identity();
     T_n_f.translation()              = t_n_a + _T_a_f.translation();
-    T_n_f.affine().block(0, 0, 3, 3) = _nf->_T_w_f.rotation();
+    T_n_f.affine().block(0, 0, 3, 3) = _T_n_w.rotation() * _nf->_T_w_f.rotation();
 
     // Threshold on the covariance of the GNSS estimate
     if (_nf->_gnss_meas->cov.norm() < _thresh_cov) {
 
-        // Set pose
-        _nf->_T_n_f = T_n_f;
+        // Use the pose of the GNSS when not initialized or VSLAM is not initialized
+        if (!_is_init || !_slam->_is_init) {
+            _nf->_T_n_f = T_n_f;
+        }
 
         // add absolute position contraint
         AbsolutePositionFactor af;
-        af.t    = _nf->_T_n_f.translation();
-        af.t(2) = 0; // Set the altitude to 0 as the estimate tend to drift
+        af.t    = T_n_f.translation();
+        // af.t(2) = 0; // Set the altitude to 0 as the estimate tend to drift
         af.nf   = _nf;
         af.inf  = Eigen::Matrix3d::Identity();
         if (_nf->_gnss_meas->cov.norm() > 1e-4) {
             af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
-            std::sqrt(1 / _nf->_gnss_meas->cov(2));
+                std::sqrt(1 / _nf->_gnss_meas->cov(2));
             af.inf *= 0.1;
         } else {
             af.inf(2, 2) = 1;
@@ -167,22 +169,25 @@ void Pipeline::step() {
         _pg->_nf_absfact_map.emplace(_nf, af);
     }
 
-    // add relative pose constraints
-    RelativePoseFactor rf;
-    rf.nf_a  = _nav_frames.back();
-    rf.nf_b  = _nf;
-    rf.T_a_b = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
-    Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(6,6);
-    _slam->_local_map_to_display->computeRelativePose(_nav_frames.back()->_frame, _nf->_frame, rf.T_a_b, cov);
+    // add relative pose constraints if the VIO is accurate
+    if (_slam->_is_init) {
+        RelativePoseFactor rf;
+        rf.nf_a             = _nav_frames.back();
+        rf.nf_b             = _nf;
+        rf.T_a_b            = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
+        Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(6, 6);
+        _slam->_local_map_to_display->computeRelativePose(_nav_frames.back()->_frame, _nf->_frame, rf.T_a_b, cov);
 
-    // Compute the information matrix
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(cov);
-    Eigen::VectorXd S      = Eigen::VectorXd((saes.eigenvalues().array() > 1e-8).select(saes.eigenvalues().array().inverse(), 0));
-    Eigen::VectorXd S_sqrt = S.cwiseSqrt();
-    Eigen::MatrixXd inf_sqrt = saes.eigenvectors() * S_sqrt.asDiagonal() * saes.eigenvectors().transpose();
-    rf.inf                   = inf_sqrt.diagonal().asDiagonal();
-    
-    _pg->_nf_relfact_map.emplace(_nf, rf);
+        // Compute the information matrix
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(cov);
+        Eigen::VectorXd S =
+            Eigen::VectorXd((saes.eigenvalues().array() > 1e-8).select(saes.eigenvalues().array().inverse(), 0));
+        Eigen::VectorXd S_sqrt   = S.cwiseSqrt();
+        Eigen::MatrixXd inf_sqrt = saes.eigenvectors() * S_sqrt.asDiagonal() * saes.eigenvectors().transpose();
+        rf.inf                   = inf_sqrt.diagonal().asDiagonal();
+
+        _pg->_nf_relfact_map.emplace(_nf, rf);
+    }
 
     // Add to the nav frame vector
     _nav_frames.push_back(_nf);
@@ -262,10 +267,9 @@ void Pipeline::calibrateRotation() {
         std::cos(theta[0]), 0, 0, 0, 1;
 
     for (auto &nf : _nav_frames) {
-        nf->_T_w_f                            = _T_n_w * nf->_T_w_f;
-        nf->_T_n_f.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
+        nf->_T_n_f.affine().block(0, 0, 3, 3) = _T_n_w.rotation() * nf->_T_w_f.rotation();
         if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
-            _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
+            _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_n_f.rotation();
     }
 }
 
@@ -305,16 +309,13 @@ void Pipeline::calibrateRotation4DoF() {
 
     // Update the parameter and the poses
     _T_n_w = Eigen::Affine3d::Identity();
-    _T_n_w.matrix() << std::cos(theta[0]), -std::sin(theta[0]), 0, dt.getPose().translation().x(),
-    std::sin(theta[0]), std::cos(theta[0]), 0, dt.getPose().translation().y(),
-    0, 0, 1, dt.getPose().translation().z(),
-    0, 0, 0, 1;
+    _T_n_w.matrix() << std::cos(theta[0]), -std::sin(theta[0]), 0, dt.getPose().translation().x(), std::sin(theta[0]),
+        std::cos(theta[0]), 0, dt.getPose().translation().y(), 0, 0, 1, dt.getPose().translation().z(), 0, 0, 0, 1;
 
     for (auto &nf : _nav_frames) {
-        nf->_T_w_f                            = _T_n_w * nf->_T_w_f;
-        nf->_T_n_f.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
+        nf->_T_n_f = _T_n_w * nf->_T_w_f;
         if (_pg->_nf_abspose_map.find(nf) != _pg->_nf_abspose_map.end())
-            _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_w_f.rotation();
+            _pg->_nf_abspose_map.at(nf).T.affine().block(0, 0, 3, 3) = nf->_T_n_f.rotation();
     }
 
     std::cout << "Theta: " << theta[0] << std::endl;
