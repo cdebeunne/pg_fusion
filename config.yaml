@@ -1,9 +1,10 @@
 slam_config_path: "/home/deos/ce.debeunne/colcon_ws/src/SaDVIO/ros/config"
-gnss_topic: "/fix"
+gnss_topic: "fix" #"/ublox_driver/receiver_lla"
 
 thresh_cov: 100
 window_size: 50
-T_a_f: [1., 0., 0., 0.1,
+remove_z_estimate: True
+T_a_f: [1., 0., 0., -0.1,
   0., 1., 0., 0.,
-  0., 0., 1., -0.1,
+  0., 0., 1., 0.1,
   0., 0., 0., 1.]

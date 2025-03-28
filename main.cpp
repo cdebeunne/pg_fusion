@@ -1,8 +1,8 @@
 #include "isaeslam/slamParameters.h"
 #include "rosVisualizer.hpp"
 #include "sensorSubscriber.h"
-#include <yaml-cpp/yaml.h>
 #include <Eigen/Dense>
+#include <yaml-cpp/yaml.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <iostream>
@@ -32,14 +32,16 @@ int main(int argc, char **argv) {
 
     // Load Pipeline parameters
     std::vector<double> data_T(16);
-    data_T                 = config["T_a_f"].as<std::vector<double>>();
+    data_T                = config["T_a_f"].as<std::vector<double>>();
     Eigen::Matrix4d M_a_f = Eigen::Map<Eigen::Affine3d::MatrixType>(&data_T[0], 4, 4).transpose();
     Eigen::Affine3d T_a_f(M_a_f);
-    double thresh_cov = config["thresh_cov"].as<double>();
-    uint window_size = config["window_size"].as<uint>();
+    double thresh_cov      = config["thresh_cov"].as<double>();
+    uint window_size       = config["window_size"].as<uint>();
+    bool remove_z_estimate = config["remove_z_estimate"].as<bool>();
 
     // Create pipeline
-    std::shared_ptr<Pipeline> pipe = std::make_shared<Pipeline>(SLAM, T_a_f, thresh_cov, window_size);
+    std::shared_ptr<Pipeline> pipe =
+        std::make_shared<Pipeline>(SLAM, T_a_f, thresh_cov, window_size, remove_z_estimate);
 
     // Start the sensor subscriber
     std::shared_ptr<SensorSubscriber> sensor_subscriber =

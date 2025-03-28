@@ -155,7 +155,8 @@ void Pipeline::step() {
         // add absolute position contraint
         AbsolutePositionFactor af;
         af.t = T_n_f.translation();
-        // af.t(2) = 0; // Set the altitude to 0 as the estimate tend to drift
+        if (_remove_z_estimate)
+            af.t.z() =  _nf->_T_w_f.translation().z(); // Set the altitude with the slam as the estimate tend to drift
         af.nf  = _nf;
         af.inf = Eigen::Matrix3d::Identity();
         if (_nf->_gnss_meas->cov.norm() > 1e-4) {
@@ -163,6 +164,11 @@ void Pipeline::step() {
                 std::sqrt(1 / _nf->_gnss_meas->cov(2));
             af.inf *= 0.1;
         } else {
+            af.inf(2, 2) = 1;
+        }
+
+        // Put a low weight on the z axis if the estimate is removed
+        if (_remove_z_estimate) {
             af.inf(2, 2) = 1;
         }
 
