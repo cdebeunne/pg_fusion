@@ -34,6 +34,8 @@ class Pipeline {
         _T_n_w   = Eigen::Affine3d::Identity();
         _is_init = false;
         _pg      = std::make_shared<PoseGraph>();
+        _llh_ref = Eigen::Vector3d::Zero();
+        _ecef_ref = Eigen::Vector3d::Zero();
     };
 
     void setRef(const Eigen::Vector3d &llh_ref);

@@ -50,6 +50,7 @@ std::shared_ptr<NavFrame> Pipeline::next() {
 }
 
 void Pipeline::init() {
+    std::cout << "Pipeline init" << std::endl;
 
     // Init SLAM
     while (!_slam->_is_init) {
@@ -73,10 +74,12 @@ void Pipeline::init() {
     // Save the pose in the SLAM frame
     _nf->_T_w_f = frame_ready->getFrame2WorldTransform();
 
-    // Set the current frame as the reference frame
-    setRef(_nf->_gnss_meas->llh_meas);
-    Eigen::Affine3d T_n_a = Eigen::Affine3d::Identity();
-    _nf->_T_n_f           = T_n_a * _T_a_f;
+    // Set the current frame as the reference frame if first init
+    if (_llh_ref.isZero()) {
+        setRef(_nf->_gnss_meas->llh_meas);
+        Eigen::Affine3d T_n_a = Eigen::Affine3d::Identity();
+        _nf->_T_n_f           = T_n_a * _T_a_f;
+    }
 
     // add absolute pose contraint
     AbsolutePoseFactor af;
@@ -112,21 +115,29 @@ void Pipeline::step() {
     while (_nf->_gnss_meas == nullptr) {
         _nf = next();
 
+        // Ignore if IMU only
+        if (_nf->_frame->getSensors().size() == 0)
+            continue;
+
         // Set KF if GNSS meas
-        if (_nf->_gnss_meas != nullptr && _nf->_frame->getSensors().size() != 0)
+        if (_nf->_gnss_meas != nullptr)
             _nf->_frame->setKeyFrame();
 
         // Send frame to the SLAM
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
 
-        // Ignore if IMU only
-        if (_nf->_frame->getSensors().size() == 0)
-            continue;
-
         // Get the ouput from the SLAM
         std::shared_ptr<isae::Frame> frame_ready = _slam->_frame_to_display;
         while (frame_ready != _nf->_frame) {
             frame_ready = _slam->_frame_to_display;
+
+            // If the SLAM is not initialized, reinitialize
+            if (!_slam->_is_init) {
+                _is_init = false;
+                return;
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
 
         _nf->_T_w_f = frame_ready->getFrame2WorldTransform();
@@ -156,13 +167,13 @@ void Pipeline::step() {
         AbsolutePositionFactor af;
         af.t = T_n_f.translation();
         if (_remove_z_estimate)
-            af.t.z() =  _nf->_T_w_f.translation().z(); // Set the altitude with the slam as the estimate tend to drift
+            af.t.z() = _nf->_T_w_f.translation().z(); // Set the altitude with the slam as the estimate tend to drift
         af.nf  = _nf;
         af.inf = Eigen::Matrix3d::Identity();
         if (_nf->_gnss_meas->cov.norm() > 1e-4) {
             af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
                 std::sqrt(1 / _nf->_gnss_meas->cov(2));
-            af.inf *= 0.1;
+            // af.inf *= 0.1;
         } else {
             af.inf(2, 2) = 1;
         }
@@ -211,19 +222,10 @@ void Pipeline::step() {
 
     // Sliding window
     if (_pg->_nf_absfact_map.size() > _window_size) {
-
-        // Pop front until an absolute position factor is marginalized
-        while (_pg->_nf_absfact_map.find(_nav_frames.front()) == _pg->_nf_absfact_map.end()) {
-            _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
-            _removed_vo_poses.push_back(
-                {_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_w * _nav_frames.front()->_T_w_f});
-            _pg->marginalize(_nav_frames.front());
-            _nav_frames.pop_front();
-        }
-
         // Marginalize
         _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
-        _removed_vo_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_w * _nav_frames.front()->_T_w_f});
+        _removed_vo_poses.push_back(
+            {_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_w * _nav_frames.front()->_T_w_f});
         _pg->marginalize(_nav_frames.front());
         _nav_frames.pop_front();
     }
@@ -244,6 +246,8 @@ void Pipeline::run() {
             init();
         else
             step();
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
@@ -377,8 +381,8 @@ void Pipeline::profiler() {
 
     // Clean the result file
     std::ofstream fw_res("log_pg/results.csv", std::ofstream::out | std::ofstream::trunc);
-    fw_res << "timestamp (ns), T_nf(00), T_nf(01), T_nf(02), T_nf(03), T_nf(10), T_nf(11), T_nf(12), "
-           << "T_nf(13), T_nf(20), T_nf(21), T_nf(22), T_nf(23)\n";
+    fw_res << "timestamp (ns), T_wf(00), T_wf(01), T_wf(02), T_wf(03), T_wf(10), T_wf(11), T_wf(12), "
+           << "T_wf(13), T_wf(20), T_wf(21), T_wf(22), T_wf(23)\n";
 
     for (auto &ts_pose : _removed_frame_poses) {
         Eigen::Affine3d T_n_f   = ts_pose.second;
