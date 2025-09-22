@@ -159,7 +159,7 @@ void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf) {
         parameter_blocks.push_back(nf_pose_map.at(nf).values());
 
         ceres::CostFunction *cost_fct = new PositionPrior(nf->_T_n_f, nf_absfact.t, nf_absfact.inf);
-        marg_sch.addMarginalizationBlock(
+        marg_sch._marginalization_blocks.push_back(
             std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
     }
 
@@ -174,7 +174,7 @@ void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf) {
         parameter_blocks.push_back(nf_pose_map.at(nf).values());
 
         ceres::CostFunction *cost_fct = new PosePriordx(nf->_T_n_f, nf_abspose.T, nf_abspose.inf);
-        marg_sch.addMarginalizationBlock(
+        marg_sch._marginalization_blocks.push_back(
             std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
     }
 
@@ -198,7 +198,7 @@ void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf) {
             parameter_blocks.push_back(nf_pose_map.at(relfact.nf_a).values());
             parameter_blocks.push_back(nf_pose_map.at(relfact.nf_b).values());
 
-            marg_sch.addMarginalizationBlock(
+            marg_sch._marginalization_blocks.push_back(
                 std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
         }
     }
@@ -213,7 +213,7 @@ void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf) {
             parameter_blocks.push_back(nf_pose_map.at(nf_prior.first).values());
         }
         ceres::CostFunction *cost_fct = new MarginalizationPrior(_prior->J, _prior->r, _prior->nf_idx_map);
-        marg_sch.addMarginalizationBlock(
+        marg_sch._marginalization_blocks.push_back(
             std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
     }
 
