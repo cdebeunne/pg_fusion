@@ -10,7 +10,6 @@
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
-#include "ublox_msgs/msg/nav_pvt.hpp"
 #include <cv_bridge/cv_bridge.h>
 
 class SensorSubscriber : public rclcpp::Node {
