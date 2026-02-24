@@ -20,9 +20,24 @@ endif(CMAKE_BUILD_TYPE STREQUAL "DEBUG")
 
 add_definitions(-D_USE_MATH_DEFINES)
 
+# -- debugging --
+function(print_all_variables)
+  message(STATUS "CMake Variables:")
+  get_cmake_property(_variableNames CACHE_VARIABLES)
+  list(SORT _variableNames)
+  foreach (_variableName ${_variableNames})
+    message(STATUS "${_variableName}=${${_variableName}}")
+  endforeach()
+endfunction()
+
+print_all_variables()
 # -------------------------------------------------------------------
 # Dependencies
 # -------------------------------------------------------------------
+
+message(WARNING "Ceres_DIR: ${Ceres_DIR}")
+message(WARNING "isae_slam_DIR: ${isae_slam_DIR}")
+message(WARNING "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -80,7 +95,7 @@ install(
 # Executables generation
 # -------------------------------------------------------------------
 add_executable(pg_main main.cpp)
-ament_target_dependencies(pg_main isae_slam rclcpp sensor_msgs visualization_msgs tf2_ros tf2_geometry_msgs std_msgs cv_bridge)
+ament_target_dependencies(pg_main isae_slam ament_index_cpp rclcpp sensor_msgs visualization_msgs tf2_ros tf2_geometry_msgs std_msgs cv_bridge)
 target_link_libraries(pg_main ${PROJECT_NAME})
 
 install(TARGETS pg_main
