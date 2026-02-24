@@ -1,4 +1,4 @@
-slam_config_path: "/home/deos/ce.debeunne/colcon_ws/src/SaDVIO/ros/config"
+slam_config_path: "/home/mvonarnim/colcon_ws/src/SaDVIO/ros/config"
 gnss_topic: "fix" #"/ublox_driver/receiver_lla"
 
 thresh_cov: 100
