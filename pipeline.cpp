@@ -114,6 +114,8 @@ void Pipeline::init() {
     // and update the poses
     calibrateRotation4DoF();
 
+    profiling();
+    
     _is_init = true;
 }
 
@@ -246,7 +248,7 @@ void Pipeline::step() {
     if (_is_init) {
         updateRelativeFactors();
         _pg->solveGraph();
-        profiler();
+        profiling();
     }
 }
 
@@ -392,33 +394,50 @@ void Pipeline::updateRelativeFactors() {
     }
 }
 
-void Pipeline::profiler() {
+void Pipeline::initProfiling(const std::filesystem::path& p) {
+    if (!p.empty())
+        profiling_path = p;
+    if (std::filesystem::is_regular_file(profiling_path))
+        profiling_path = profiling_path.parent_path();
 
-    if (!std::filesystem::is_directory("log_pg"))
-        std::filesystem::create_directory("log_pg");
+    if (!std::filesystem::is_directory(profiling_path))
+        std::filesystem::create_directory(profiling_path);
+    std::cout << "SLAM results will be stored in"
+                << std::filesystem::absolute(profiling_path)
+                << std::endl;
+}
 
-    // Clean the result file
-    std::ofstream fw_res("log_pg/results.csv", std::ofstream::out | std::ofstream::trunc);
-    fw_res << "timestamp (ns), T_wf(00), T_wf(01), T_wf(02), T_wf(03), T_wf(10), T_wf(11), T_wf(12), "
-           << "T_wf(13), T_wf(20), T_wf(21), T_wf(22), T_wf(23)\n";
+void Pipeline::profiling() {
+    if (!_is_init) {
+        if (profiling_path.empty())
+            initProfiling();
 
-    for (auto &ts_pose : _removed_frame_poses) {
-        Eigen::Affine3d T_n_f   = ts_pose.second;
-        const Eigen::Matrix3d R = T_n_f.linear();
-        Eigen::Vector3d tnf     = T_n_f.translation();
-        fw_res << ts_pose.first << "," << R(0, 0) << "," << R(0, 1) << "," << R(0, 2) << "," << tnf.x() << ","
-               << R(1, 0) << "," << R(1, 1) << "," << R(1, 2) << "," << tnf.y() << "," << R(2, 0) << "," << R(2, 1)
-               << "," << R(2, 2) << "," << tnf.z() << "\n";
+        // Clean the result file
+        std::ofstream fw_res(profiling_path / "results.csv", std::ofstream::out | std::ofstream::trunc);
+        fw_res << "timestamp (ns), T_wf(00), T_wf(01), T_wf(02), T_wf(03), T_wf(10), T_wf(11), T_wf(12), "
+            << "T_wf(13), T_wf(20), T_wf(21), T_wf(22), T_wf(23)\n";
+        fw_res.close();
+    } else {
+        std::ofstream fw_res(profiling_path / "results.csv", std::ofstream::out | std::ofstream::app);
+      
+        for (auto &ts_pose : _removed_frame_poses) {
+            Eigen::Affine3d T_n_f   = ts_pose.second;
+            const Eigen::Matrix3d R = T_n_f.linear();
+            Eigen::Vector3d tnf     = T_n_f.translation();
+            fw_res << ts_pose.first << "," << R(0, 0) << "," << R(0, 1) << "," << R(0, 2) << "," << tnf.x() << ","
+                << R(1, 0) << "," << R(1, 1) << "," << R(1, 2) << "," << tnf.y() << "," << R(2, 0) << "," << R(2, 1)
+                << "," << R(2, 2) << "," << tnf.z() << "\n";
+        }
+
+        for (auto &nf : _nav_frames) {
+            Eigen::Affine3d T_n_f   = nf->_T_n_f;
+            const Eigen::Matrix3d R = T_n_f.linear();
+            Eigen::Vector3d tnf     = T_n_f.translation();
+            fw_res << nf->_timestamp << "," << R(0, 0) << "," << R(0, 1) << "," << R(0, 2) << "," << tnf.x() << ","
+                << R(1, 0) << "," << R(1, 1) << "," << R(1, 2) << "," << tnf.y() << "," << R(2, 0) << "," << R(2, 1)
+                << "," << R(2, 2) << "," << tnf.z() << "\n";
+        }
+
+        fw_res.close();
     }
-
-    for (auto &nf : _nav_frames) {
-        Eigen::Affine3d T_n_f   = nf->_T_n_f;
-        const Eigen::Matrix3d R = T_n_f.linear();
-        Eigen::Vector3d tnf     = T_n_f.translation();
-        fw_res << nf->_timestamp << "," << R(0, 0) << "," << R(0, 1) << "," << R(0, 2) << "," << tnf.x() << ","
-               << R(1, 0) << "," << R(1, 1) << "," << R(1, 2) << "," << tnf.y() << "," << R(2, 0) << "," << R(2, 1)
-               << "," << R(2, 2) << "," << tnf.z() << "\n";
-    }
-
-    fw_res.close();
 }

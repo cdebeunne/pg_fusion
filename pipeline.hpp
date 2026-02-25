@@ -46,7 +46,21 @@ class Pipeline {
     void calibrateRotation();
     void calibrateRotation4DoF();
     void updateRelativeFactors();
-    void profiler();
+
+    /*!
+     * @brief TODO 
+     */
+    void initProfiling(const std::filesystem::path& p);
+    void initProfiling() {
+        // Create an empty path object to use default initialization
+        initProfiling(std::filesystem::path("log_pg"));
+    }
+
+    /*!
+     * @brief A function to monitor the GVIO behaviour
+     */
+    void profiling();
+
     void run();
     void init();
     void step();
@@ -67,6 +81,9 @@ class Pipeline {
     std::deque<std::shared_ptr<NavFrame>> _nav_frames;
     std::vector<std::pair<unsigned long long, Eigen::Affine3d>> _removed_frame_poses, _removed_vo_poses;
     std::shared_ptr<NavFrame> _nf;
+
+  protected:  
+    std::filesystem::path profiling_path;
 };
 
 #endif // PIPELINE_H
