@@ -15,6 +15,7 @@ PG Fusion is a ROS 2-based package for integrating pose graph optimization with 
 ### Prerequisites
 
 - **ROS 2 Galactic** or later
+  - Separate branch for ROS 2 Jazzy
 - [SaDVIO](https://github.com/ISAE-PNX/SaDVIO) that comes with all the dependencies, it must be installed as a library, not as a ROS2 node.
 
 ### Build Instructions
