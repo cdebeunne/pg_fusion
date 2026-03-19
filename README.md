@@ -56,7 +56,21 @@ The behavior of the pipeline can be configured using the `config.yaml` file. Key
 - `window_size`: Sliding window size for pose graph optimization.
 - `remove_z_estimate`: Whether to ignore the Z-axis estimate from GNSS.
 
-### Visualization
+## Topics
+
+<p align='center'>
+    <img src="./doc/rosgraph_pg_fusion.png" alt="drawing" width="800"/>
+</p>
+
+### pg_pose
+
+Of type `geometry_msgs::msg::PoseStamped`;
+
+### pg_slam
+
+### pg_traj
+
+## Visualization
 
 The package provides RViz visualization for:
 

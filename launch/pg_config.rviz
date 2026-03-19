@@ -83,7 +83,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /cam0/image_raw
+        Value: /cam_0/image_raw
       Value: false
     - Class: rviz_default_plugins/Image
       Enabled: true
@@ -117,7 +117,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /pg_slam
+        Value: /pg/slam
       Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: true
@@ -130,7 +130,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /pg_traj
+        Value: /pg/traj
       Value: true
   Enabled: true
   Global Options:

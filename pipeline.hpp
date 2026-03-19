@@ -41,6 +41,7 @@ class Pipeline {
     void setRef(const Eigen::Vector3d &llh_ref);
     const Eigen::Vector3d llhToEcef(const Eigen::Vector3d &llh);
     const Eigen::Vector3d ecefToENU(const Eigen::Vector3d &ecef);
+    const Eigen::Vector3d enuToECEF(const Eigen::Vector3d &enu);
 
     std::shared_ptr<NavFrame> next();
     void calibrateRotation();

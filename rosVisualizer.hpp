@@ -3,6 +3,7 @@
 
 #include <geometry_msgs/msg/point.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -23,10 +24,11 @@ class RosVisualizer : public rclcpp::Node {
     RosVisualizer() : Node("pg_publisher") {
         std::cout << "\n Creation of ROS vizualizer" << std::endl;
 
-        _pub_traj       = this->create_publisher<visualization_msgs::msg::Marker>("pg_traj", 1000);
-        _pub_traj_vo    = this->create_publisher<visualization_msgs::msg::Marker>("pg_traj_vo", 1000);
+        _pub_traj       = this->create_publisher<visualization_msgs::msg::Marker>("pg/traj", 1000);
+        _pub_traj_vo    = this->create_publisher<visualization_msgs::msg::Marker>("pg/vo/traj", 1000);
         _pub_pose       = this->create_publisher<geometry_msgs::msg::PoseStamped>("pg_pose", 1000);
-        _pub_slam       = this->create_publisher<geometry_msgs::msg::PoseStamped>("pg_slam", 1000);
+        _pub_ecef       = this->create_publisher<geometry_msgs::msg::PointStamped>("pg/ecef", 1000);
+        _pub_slam       = this->create_publisher<geometry_msgs::msg::PoseStamped>("pg/slam", 1000);
         _tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
         _traj_msg.type    = visualization_msgs::msg::Marker::LINE_STRIP;
@@ -79,6 +81,24 @@ class RosVisualizer : public rclcpp::Node {
         // publish messages
         _pub_pose->publish(Tnf_msg);
     }
+
+    void publishECEF(const Eigen::Vector3d ecef) {
+
+        geometry_msgs::msg::PointStamped ecef_msg;
+        ecef_msg.header.stamp    = rclcpp::Node::now();
+        ecef_msg.header.frame_id = "world";
+
+        // Deal with position
+        geometry_msgs::msg::Point p;
+        p.x                   = ecef(0);
+        p.y                   = ecef(1);
+        p.z                   = ecef(2);
+        ecef_msg.point        = p;
+
+        // publish messages
+        _pub_ecef->publish(ecef_msg);
+    }
+
 
     void publishFrame(std::shared_ptr<Pipeline> &pipe) {
         std::shared_ptr<NavFrame> frame = pipe->_nav_frames.back();
@@ -173,6 +193,7 @@ class RosVisualizer : public rclcpp::Node {
 
             if (!pipe->_nav_frames.empty()) {
                 publishPose(pipe->_T_n_f);
+                publishECEF(pipe->enuToECEF(pipe->_T_n_f.translation()));
                 publishFrame(pipe);
                 publishMap(pipe);
             }
@@ -182,6 +203,7 @@ class RosVisualizer : public rclcpp::Node {
 
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr _pub_traj, _pub_traj_vo;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr _pub_pose, _pub_slam;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr _pub_ecef;
     std::shared_ptr<tf2_ros::TransformBroadcaster> _tf_broadcaster;
     visualization_msgs::msg::Marker _traj_msg, _traj_vo_msg;
 };
