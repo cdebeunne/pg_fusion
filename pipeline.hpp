@@ -85,6 +85,9 @@ class Pipeline {
 
   protected:  
     std::filesystem::path profiling_path;
+
+  private:
+    double __t_offset_gnss_img; // clock offset GNSS to camera [s]
 };
 
 #endif // PIPELINE_H

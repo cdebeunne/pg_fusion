@@ -105,8 +105,13 @@ class SensorSubscriber : public rclcpp::Node {
 
         std::vector<std::shared_ptr<isae::ASensor>> sensors;
         double time_tolerance = 0.0025; // TODO add this as a parameter of the yaml
-        double t_last         = 0;
-        double t_curr         = 0;
+        unsigned long long t_last         = 0;
+        unsigned long long t_curr         = 0;
+        unsigned long long ts_gnss_last = 0;
+        unsigned long long ts_gnss_curr = 0;
+        rcl_time_point_value_t t_gnss_last = 0;
+        rcl_time_point_value_t t_gnss_curr = 0;
+        double time_tol_gnss_s = 0.1;
 
         while (true) {
 
@@ -120,9 +125,12 @@ class SensorSubscriber : public rclcpp::Node {
                 if (!_imgs_bufl.empty() && !_imgs_bufr.empty()) {
                     std::cout << "Found STEREO image in buffer! " 
                         << "(" << _imgs_bufl.size() << "|" << _imgs_bufr.size() << ")" << std::endl;
-                    double time0 = _imgs_bufl.front().header.stamp.sec * 1e9 + _imgs_bufl.front().header.stamp.nanosec;
-                    double time1 = _imgs_bufr.front().header.stamp.sec * 1e9 + _imgs_bufr.front().header.stamp.nanosec;
+                    rclcpp::Time t0 = _imgs_bufl.front().header.stamp;
+                    rclcpp::Time t1 = _imgs_bufr.front().header.stamp;
+                    unsigned long long time0 = t0.nanoseconds();
+                    unsigned long long time1 = t1.nanoseconds();
                     t_curr       = time0;
+                    std::cout << "Frame timestamp: " << t_curr << std::endl;
 
                     // sync tolerance
                     if (time0 < time1 - 25000000) {
@@ -134,7 +142,7 @@ class SensorSubscriber : public rclcpp::Node {
                     } else {
 
                         // Check if this measurement can be added to the current frame
-                        if (std::abs(t_curr - t_last) * 1e-9 > time_tolerance && !sensors.empty()) {
+                        if (std::abs(t_curr*1e-9 - t_last*1e-9)  > time_tolerance && !sensors.empty()) {
 
                             // Create a frame with the stored sensors
                             std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
@@ -145,15 +153,34 @@ class SensorSubscriber : public rclcpp::Node {
                                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
                                 std::cout << "Created NF (stereo) " << " (" << _pipe->_nf_queue.size() << "in queue)" << std::endl;
                             } else {
-                                _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
-                                _gnss_buf.pop();
-                                std::cout << "Created NF (stereo | GNSS) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
+                                
+                                // check if the step between two GNSS measurement timestamps 
+                                // is similar to the step in wall time
+                                // otherwise delayed measurements can ruin the graph
+                                ts_gnss_curr = _gnss_buf.front()->ts_long;
+                                t_gnss_curr = this->now().nanoseconds();
+                                if (ts_gnss_last && // initial value is zero
+                                    std::abs((ts_gnss_curr - ts_gnss_last)*1e-9 - (t_gnss_curr - t_gnss_last)*1e-9) > time_tol_gnss_s)
+                                {
+                                    _gnss_buf.pop();
+                                    std::cout << "############################################################" << std::endl;
+                                    std::cout << "Discarded NF (stereo | GNSS) " << " (" << std::abs((ts_gnss_curr - ts_gnss_last)*1e-9 - (t_gnss_curr - t_gnss_last)*1e-9) << " s)"  << std::endl;
+                                    std::cout << "############################################################" << std::endl;
+                                } 
+                                else
+                                {
+                                    _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
+                                    _gnss_buf.pop();
+                                    std::cout << "Created NF (stereo | GNSS) " << " (" << _pipe->_nf_queue.size() << " in queue)"  << std::endl;
+                                }
+                                ts_gnss_last = ts_gnss_curr;
+                                t_gnss_last = t_gnss_curr;
                             }
 
                             sensors.clear();
                         } else {
-                            if (std::abs(t_curr - t_last) * 1e-9 <= time_tolerance) {
-                                std::cout << "Time tolerance violated: " << std::abs(t_curr - t_last) * 1e-9 << " <= " << time_tolerance << std::endl;
+                            if (std::abs(t_curr*1e-9 - t_last*1e-9) <= time_tolerance) {
+                                std::cout << "Time tolerance violated: " << std::abs(t_curr*1e-9 - t_last*1e-9) << " <= " << time_tolerance << std::endl;
                             }
                             if (sensors.empty()) {
                                 std::cout << "Sensors empty!" << std::endl;
@@ -187,7 +214,7 @@ class SensorSubscriber : public rclcpp::Node {
                     t_curr = _imgs_bufl.front().header.stamp.sec * 1e9 + _imgs_bufl.front().header.stamp.nanosec;
 
                     // Check if this measurement can be added to the current frame
-                    if (std::abs(t_curr - t_last) * 1e-9 > time_tolerance && !sensors.empty()) {
+                    if (std::abs(t_curr*1e-9 - t_last*1e-9) > time_tolerance && !sensors.empty()) {
 
                         // Create a frame with the stored sensors
                         std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
@@ -224,7 +251,7 @@ class SensorSubscriber : public rclcpp::Node {
                 t_curr -= _prov->getIMUConfig()->dt_imu_cam * 1e9;
 
                 // Check if this measurement can be added to the current frame
-                if (std::abs(t_curr - t_last) * 1e-9 > time_tolerance && !sensors.empty()) {
+                if (std::abs(t_curr*1e-9 - t_last*1e-9) > time_tolerance && !sensors.empty()) {
 
                     // Create a frame with the stored sensors
                     std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());

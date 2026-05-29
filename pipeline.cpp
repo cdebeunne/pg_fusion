@@ -77,7 +77,11 @@ void Pipeline::init()
 
         // Set KF if GNSS meas
         if (_nf->_gnss_meas != nullptr)
+        {
+            __t_offset_gnss_img = _nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9;
+            std::cout << "GNSS/Camera offset [s]: " << __t_offset_gnss_img << std::endl;
             _nf->_frame->setKeyFrame();
+        }
 
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
         std::cout << "Found GNSS NF" << std::endl;
@@ -157,11 +161,25 @@ void Pipeline::step()
         // Set KF if GNSS meas
         if (_nf->_gnss_meas != nullptr) 
         {
-            _nf->_frame->setKeyFrame();
-            std::cout << "Found GNSS NF" << std::endl;
+            // check synchronous measurements
+            double time_tol_gnss_s = 0.1; // TODO make configurable
+            if (std::abs(_nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9 - __t_offset_gnss_img) > time_tol_gnss_s)
+            {
+                std::cout << "############################################################" << std::endl;                                    
+                std::cout << "Throw IMG/GNSS Sync error: " << "(" << (_nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9) << ") " << _nf->_gnss_meas->ts_long << " | " << _nf->_frame->getTimestamp() << std::endl;
+                std::cout << "############################################################" << std::endl;       
+                
+                _nf->_gnss_meas = nullptr;
+            }
+            else
+            {
+                _nf->_frame->setKeyFrame();
+                std::cout << "Found GNSS NF" << std::endl;
+            }
         }
 
         // Send frame to the SLAM
+        // (with or without GNSS, any data is good)
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
 
         // Get the ouput from the SLAM
