@@ -44,8 +44,10 @@ class SensorSubscriber : public rclcpp::Node {
         // Extract ts from msg
         rclcpp::Time ts            = gnss_msg.header.stamp;
         unsigned long long ts_long = (unsigned long long)ts.nanoseconds();
+        std::cout << "GNSS meas. received. Timestamp: " << ts_long << std::endl;
+        std::cout << "Current time: " <<  this->now().nanoseconds() << std::endl;
 
-        // Build gnns measurement
+        // Build gnss measurement
         std::shared_ptr<GNSSMeas> gnss_meas = std::make_shared<GNSSMeas>();
         gnss_meas->llh_meas =
             Eigen::Vector3d((double)gnss_msg.latitude, (double)gnss_msg.longitude, (double)gnss_msg.altitude);
@@ -54,9 +56,11 @@ class SensorSubscriber : public rclcpp::Node {
                                          (double)gnss_msg.position_covariance[8]);
         gnss_meas->status  = gnss_msg.status.status;
         gnss_meas->service = gnss_msg.status.service;
+        gnss_meas->ts_long = ts_long;
 
         // push the message in the buffer
         _gnss_buf.push(gnss_meas);
+        std::cout << "GNSS Buffer contains " << _gnss_buf.size() << " elements." << std::endl;
     }
 
     void subRightImage(const sensor_msgs::msg::Image &img_msg) {
@@ -114,6 +118,8 @@ class SensorSubscriber : public rclcpp::Node {
             // Case Stereo
             if (_prov->getNCam() == 2) {
                 if (!_imgs_bufl.empty() && !_imgs_bufr.empty()) {
+                    std::cout << "Found STEREO image in buffer! " 
+                        << "(" << _imgs_bufl.size() << "|" << _imgs_bufr.size() << ")" << std::endl;
                     double time0 = _imgs_bufl.front().header.stamp.sec * 1e9 + _imgs_bufl.front().header.stamp.nanosec;
                     double time1 = _imgs_bufr.front().header.stamp.sec * 1e9 + _imgs_bufr.front().header.stamp.nanosec;
                     t_curr       = time0;
@@ -137,12 +143,21 @@ class SensorSubscriber : public rclcpp::Node {
                             // Add a gnss measurement if available and images in the frame
                             if (_gnss_buf.empty() || f->getSensors().empty()) {
                                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
+                                std::cout << "Created NF (stereo) " << " (" << _pipe->_nf_queue.size() << "in queue)" << std::endl;
                             } else {
                                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
                                 _gnss_buf.pop();
+                                std::cout << "Created NF (stereo | GNSS) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
                             }
 
                             sensors.clear();
+                        } else {
+                            if (std::abs(t_curr - t_last) * 1e-9 <= time_tolerance) {
+                                std::cout << "Time tolerance violated: " << std::abs(t_curr - t_last) * 1e-9 << " <= " << time_tolerance << std::endl;
+                            }
+                            if (sensors.empty()) {
+                                std::cout << "Sensors empty!" << std::endl;
+                            }
                         }
 
                         _img_mutex.lock();
@@ -166,6 +181,8 @@ class SensorSubscriber : public rclcpp::Node {
                 // Case mono
             } else {
                 if (!_imgs_bufl.empty()) {
+                    std::cout << "Found MONO image in buffer! " 
+                        << "(" << _imgs_bufl.size() << ")" << std::endl;
                     std::lock_guard<std::mutex> lock(_img_mutex);
                     t_curr = _imgs_bufl.front().header.stamp.sec * 1e9 + _imgs_bufl.front().header.stamp.nanosec;
 
@@ -179,9 +196,11 @@ class SensorSubscriber : public rclcpp::Node {
                         // Add a gnss measurement if available and images in the frame
                         if (_gnss_buf.empty() || f->getSensors().empty()) {
                             _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
+                            std::cout << "Created NF (mono) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
                         } else {
                             _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
                             _gnss_buf.pop();
+                            std::cout << "Created NF (mono | GNSS) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
                         }
 
                         sensors.clear();
@@ -200,6 +219,7 @@ class SensorSubscriber : public rclcpp::Node {
 
             // IMU message
             if (!_imu_buf.empty()) {
+                std::cout << "Found IMU in buffer!" << std::endl;
                 t_curr = _imu_buf.front().header.stamp.sec * 1e9 + _imu_buf.front().header.stamp.nanosec;
                 t_curr -= _prov->getIMUConfig()->dt_imu_cam * 1e9;
 
@@ -213,9 +233,11 @@ class SensorSubscriber : public rclcpp::Node {
                     // Add a gnss measurement if available
                     if (_gnss_buf.empty() || f->getSensors().empty()) {
                         _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
+                        std::cout << "Created NF (imu) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
                     } else {
                         _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
                         _gnss_buf.pop();
+                        std::cout << "Created NF (imu | GNSS) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
                     }
 
                     sensors.clear();

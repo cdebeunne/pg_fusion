@@ -80,6 +80,7 @@ void Pipeline::init()
             _nf->_frame->setKeyFrame();
 
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
+        std::cout << "Found GNSS NF" << std::endl;
     }
 
     // Get the ouput from the SLAM
@@ -142,6 +143,7 @@ void Pipeline::step()
     _nf = next();
     _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
 
+    std::cout << _nf->_timestamp << std::endl;
     // Wait for a frame with GPS
     std::shared_ptr<isae::Frame> frame_ready;
     while (_nf->_gnss_meas == nullptr)
@@ -153,8 +155,11 @@ void Pipeline::step()
             continue;
 
         // Set KF if GNSS meas
-        if (_nf->_gnss_meas != nullptr)
+        if (_nf->_gnss_meas != nullptr) 
+        {
             _nf->_frame->setKeyFrame();
+            std::cout << "Found GNSS NF" << std::endl;
+        }
 
         // Send frame to the SLAM
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
@@ -225,6 +230,13 @@ void Pipeline::step()
         }
 
         _pg->_nf_absfact_map.emplace(_nf, af);
+        std::cout << "af" << std::endl;
+        std::cout << af.t.matrix() << std::endl;
+        std::cout << af.inf.matrix() << std::endl;
+    }
+    else
+    {
+        std::cout << "GPS not used. Cov.: " << _nf->_gnss_meas->cov.norm() << std::endl;
     }
 
     // add relative pose constraints if the VIO is initialized
@@ -243,20 +255,42 @@ void Pipeline::step()
         rf.nf_b = _nf;
         rf.T_a_b = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
         Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(6, 6);
-        _slam->_local_map_to_display->computeRelativePose(_nav_frames.back()->_frame, _nf->_frame, rf.T_a_b, cov);
+        if (_slam->_local_map_to_display->computeRelativePose(_nav_frames.back()->_frame, _nf->_frame, rf.T_a_b, cov))
+        {
+            // Compute the information matrix
+            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(cov);
+            Eigen::VectorXd S =
+                Eigen::VectorXd((saes.eigenvalues().array() > 1e-8).select(saes.eigenvalues().array().inverse(), 0));
+            Eigen::VectorXd S_sqrt = S.cwiseSqrt();
+            Eigen::MatrixXd inf_sqrt = saes.eigenvectors() * S_sqrt.asDiagonal() * saes.eigenvectors().transpose();
+            rf.inf = inf_sqrt.diagonal().asDiagonal();
 
-        // Compute the information matrix
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(cov);
-        Eigen::VectorXd S =
-            Eigen::VectorXd((saes.eigenvalues().array() > 1e-8).select(saes.eigenvalues().array().inverse(), 0));
-        Eigen::VectorXd S_sqrt = S.cwiseSqrt();
-        Eigen::MatrixXd inf_sqrt = saes.eigenvectors() * S_sqrt.asDiagonal() * saes.eigenvectors().transpose();
-        rf.inf = inf_sqrt.diagonal().asDiagonal();
+            if (rf.T_a_b.matrix().allFinite())
+            {
+                _pg->_nf_relfact_map.emplace(_nf, rf);
+            }
+            else
+            {
+                std::cout << "SLAM input for relativ factor is !finite" << std::endl;
+                // std::cout << "rf" << std::endl;
+                // std::cout << rf.T_a_b.matrix() << std::endl;
+                // std::cout << rf.inf.matrix() << std::endl;
+            }
+            std::cout << "rf" << std::endl;
+            std::cout << rf.T_a_b.matrix() << std::endl;
+            std::cout << rf.inf.matrix() << std::endl;
+        } 
+        else
+        {
+            std::cout << "SLAM could not compute relative pose factor!" << std::endl;
+            std::cout << "rf" << std::endl;
+            std::cout << rf.T_a_b.matrix() << std::endl;
+        }
 
-        _pg->_nf_relfact_map.emplace(_nf, rf);
     }
     else // If the slam is not init, the system needs to re align
     {
+        std::cout << "SLAM is not initialized." << std::endl;
         _is_init = false;
         _nf->_is_aligned = false;
     }
@@ -268,19 +302,25 @@ void Pipeline::step()
     if (_pg->_nf_absfact_map.size() > _window_size)
     {
         // Marginalize
+        std::cout << "Marginalizing PG ..." << std::endl;
         _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
         _removed_vo_poses.push_back(
             {_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_w * _nav_frames.front()->_T_w_f});
         _pg->marginalize(_nav_frames.front());
         _nav_frames.pop_front();
+        std::cout << "PG Marginalized!" << std::endl;
     }
 
     // Solve pg
     if (_is_init)
     {
+        std::cout << "Solving PG ..." << std::endl;        
         updateRelativeFactors();
         if (!_pg->solveGraph())
+        {
             std::cout << "Solver failed -- Breakpoint" << std::endl;
+            throw std::runtime_error("TERMINATING AFTER SOLVER FAILURE");
+        }
         profiling();
     }
 }
@@ -393,6 +433,11 @@ void Pipeline::calibrateRotation4DoF()
     ceres::Solve(options, &problem, &summary);
 
     std::cout << summary.FullReport() << std::endl;
+
+    if (!summary.IsSolutionUsable()) 
+    {
+        throw(std::runtime_error("PG-FUSION detected CERES error; terminating execution"));
+    }
 
     // Update the parameter and the poses
     _T_n_w = Eigen::Affine3d::Identity();

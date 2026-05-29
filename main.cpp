@@ -1,6 +1,7 @@
 #include "isaeslam/slamParameters.h"
 #include "rosVisualizer.hpp"
 #include "sensorSubscriber.h"
+#include "gnssSubscriber.h"
 #include <Eigen/Dense>
 #include <yaml-cpp/yaml.h>
 
@@ -11,7 +12,11 @@ int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
 
     // load config file
-    YAML::Node config = YAML::LoadFile(ament_index_cpp::get_package_share_directory("pg_fusion") + "/config.yaml");
+    std::string yaml_path = ament_index_cpp::get_package_share_directory("pg_fusion") + "/config.yaml";
+    std::cout << "Loading YAML: " << yaml_path << std::endl;
+    if (!std::filesystem::exists(yaml_path))
+        std::cout << yaml_path << " not found!" << std::endl;
+    YAML::Node config = YAML::LoadFile(yaml_path);
 
     // Create the SLAM parameter object
     std::string path                                 = config["slam_config_path"].as<std::string>();
@@ -63,7 +68,17 @@ int main(int argc, char **argv) {
     // Start a thread for providing new measurements to the SLAM
     std::thread sync_thread(&SensorSubscriber::sync_process, sensor_subscriber);
 
-    rclcpp::spin(sensor_subscriber);
+    // launch a pure GNSS subscriber
+    std::shared_ptr<GnssSubscriber> gnss_subscriber =
+        std::make_shared<GnssSubscriber>(config["gnss_topic"].as<std::string>());
+    std::thread gnss_thread(&GnssSubscriber::sync_process, gnss_subscriber);
+
+    rclcpp::executors::MultiThreadedExecutor mt_executor;
+    mt_executor.add_node(sensor_subscriber);
+    mt_executor.add_node(gnss_subscriber);
+    mt_executor.spin();
+
+    // rclcpp::spin(sensor_subscriber);
 
     return 0;
 }

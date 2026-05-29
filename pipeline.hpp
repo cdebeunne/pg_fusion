@@ -26,16 +26,16 @@ class Pipeline {
           _remove_z_estimate(remove_z_estimate) {
 
         // Ellipsoid parameters of the WGS84 convention
-        _a  = 6378137.0f;
-        _f  = (1.0f / 298.257223563);
-        _e2 = 1 - (1 - _f) * (1 - _f);
+        _a  = 6378137.0f;                           //< semi-major axis (cf. Earth radius) [m]
+        _f  = (1.0f / 298.257223563);               //< flattening constant
+        _e2 = 1 - (1 - _f) * (1 - _f);              //< ellipsoidal shape parameter
 
-        _T_n_f   = Eigen::Affine3d::Identity();
-        _T_n_w   = Eigen::Affine3d::Identity();
+        _T_n_f   = Eigen::Affine3d::Identity();     //< transformation estimate local -> navigation frame (ENU)
+        _T_n_w   = Eigen::Affine3d::Identity();     //< transformation estimate world -> navigation frame (ECEF)
         _is_init = false;
-        _pg      = std::make_shared<PoseGraph>();
-        _llh_ref = Eigen::Vector3d::Zero();
-        _ecef_ref = Eigen::Vector3d::Zero();
+        _pg      = std::make_shared<PoseGraph>();   //
+        _llh_ref = Eigen::Vector3d::Zero();         //< origin of local frame as llh
+        _ecef_ref = Eigen::Vector3d::Zero();        //< origin of local frame as ECEF
     };
 
     void setRef(const Eigen::Vector3d &llh_ref);
