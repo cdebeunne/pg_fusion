@@ -1,2 +1,10 @@
+cmake-build-debug/
+cmake-build-release/
 build/*
-vscode/*
+bag/*
+
+\.idea/
+
+Documentation/
+
+.vscode/*
