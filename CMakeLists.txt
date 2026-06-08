@@ -62,6 +62,7 @@ include_directories(
   ${CERES_INCLUDE_DIRS}
   ${YAML_CPP_INCLUDE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 
@@ -71,14 +72,14 @@ include_directories(
 
 set(SOURCE
    ${SOURCE}
-   ${CMAKE_CURRENT_SOURCE_DIR}/poseGraph.cpp
-   ${CMAKE_CURRENT_SOURCE_DIR}/pipeline.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/src/core/poseGraph.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/src/core/pipeline.cpp
 )
 set(HEADERS
    ${HEADERS}
-   ${CMAKE_CURRENT_SOURCE_DIR}/poseGraph.hpp
-   ${CMAKE_CURRENT_SOURCE_DIR}/pipeline.hpp
-   ${CMAKE_CURRENT_SOURCE_DIR}/navframe.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/include/poseGraph.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/include/pipeline.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/include/data/navframe.hpp
 )
 add_library(${PROJECT_NAME} SHARED ${SOURCE} ${HEADERS})
 message(STATUS ${ISAE_SLAM_LIBRARIES})
@@ -94,7 +95,7 @@ install(
 # -------------------------------------------------------------------
 # Executables generation
 # -------------------------------------------------------------------
-add_executable(pg_main main.cpp)
+add_executable(pg_main src/ros/main.cpp)
 ament_target_dependencies(pg_main isae_slam ament_index_cpp rclcpp sensor_msgs visualization_msgs tf2_ros tf2_geometry_msgs std_msgs cv_bridge)
 target_link_libraries(pg_main ${PROJECT_NAME})
 
@@ -104,7 +105,7 @@ install(TARGETS pg_main
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME})
 
-  install(FILES config.yaml
+  install(FILES config/config.yaml
   DESTINATION share/${PROJECT_NAME})
 
 ament_package()

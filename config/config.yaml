@@ -1,5 +1,5 @@
 slam_config_path: "/home/mvonarnim/colcon_ws/src/SaDVIO/ros/config"
-gnss_topic: "fix" #"/ublox_driver/receiver_lla"
+gnss_topic: "/ublox/fix" #"/ublox_driver/receiver_lla"
 
 thresh_cov: 60
 window_size: 200

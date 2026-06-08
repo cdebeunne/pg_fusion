@@ -1,7 +1,7 @@
 #ifndef PIPELINE_H
 #define PIPELINE_H
 
-#include "navframe.hpp"
+#include "data/navframe.hpp"
 #include "poseGraph.hpp"
 #include <Eigen/Dense>
 #include <ceres/ceres.h>

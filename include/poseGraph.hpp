@@ -2,7 +2,7 @@
 #define POSE_GRAPH_H
 
 #include "isaeslam/slamCore.h"
-#include "navframe.hpp"
+#include "data/navframe.hpp"
 #include <Eigen/Dense>
 #include <ceres/ceres.h>
 #include <unordered_map>

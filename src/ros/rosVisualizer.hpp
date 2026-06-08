@@ -15,7 +15,7 @@
 #include <thread>
 #include <visualization_msgs/msg/marker.hpp>
 
-#include "navframe.hpp"
+#include "data/navframe.hpp"
 #include "pipeline.hpp"
 
 class RosVisualizer : public rclcpp::Node {
