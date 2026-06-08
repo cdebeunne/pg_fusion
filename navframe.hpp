@@ -43,7 +43,7 @@ class NavFrame {
         {            
             if ((_timestamp - gnss_meas->ts_long) > 1e9)
             {
-                std::cout << (_timestamp - gnss_meas->ts_long) << std::endl;
+                std::cout << "Offset Frame -> GNSS" << (_timestamp - gnss_meas->ts_long) << std::endl;
                 // throw std::runtime_error("Time offset too large (1)");
             }
         }
@@ -51,7 +51,7 @@ class NavFrame {
         {            
             if ((gnss_meas->ts_long - _timestamp) > 1e9)
             {
-                std::cout << (_timestamp - gnss_meas->ts_long) << std::endl;
+                std::cout << "Offset Frame -> GNSS" << (_timestamp - gnss_meas->ts_long) << std::endl;
                 // throw std::runtime_error("Time offset too large (2)");
             }
         }

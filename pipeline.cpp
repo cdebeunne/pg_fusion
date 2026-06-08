@@ -166,7 +166,10 @@ void Pipeline::step()
             if (std::abs(_nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9 - __t_offset_gnss_img) > time_tol_gnss_s)
             {
                 std::cout << "############################################################" << std::endl;                                    
-                std::cout << "Throw IMG/GNSS Sync error: " << "(" << (_nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9) << ") " << _nf->_gnss_meas->ts_long << " | " << _nf->_frame->getTimestamp() << std::endl;
+                std::cout << "Throw IMG/GNSS Sync error: " 
+                        << "(" << (_nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9) << ") " 
+                        << "[" << __t_offset_gnss_img << "] " 
+                        << _nf->_gnss_meas->ts_long << " | " << _nf->_frame->getTimestamp() << std::endl;
                 std::cout << "############################################################" << std::endl;       
                 
                 _nf->_gnss_meas = nullptr;

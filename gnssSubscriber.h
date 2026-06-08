@@ -21,8 +21,9 @@ class GnssSubscriber : public rclcpp::Node {
         // Extract ts from msg
         rclcpp::Time ts            = gnss_msg.header.stamp;
         unsigned long long ts_long = (unsigned long long)ts.nanoseconds();
-        std::cout << "[GS] GNSS meas. received. Timestamp: " << ts_long << std::endl;
-        std::cout << "[GS] Current time: " <<  this->now().nanoseconds() << std::endl;
+        std::stringstream  msg;
+        msg << "[GS] GNSS meas. received. Timestamp: " << ts_long << std::endl;
+        msg << "[GS] Current time: " <<  this->now().nanoseconds() << std::endl;
 
         // Build gnss measurement
         std::shared_ptr<GNSSMeas> gnss_meas = std::make_shared<GNSSMeas>();
@@ -37,11 +38,12 @@ class GnssSubscriber : public rclcpp::Node {
 
         // push the message in the buffer
         _gnss_buf.push(gnss_meas);
-        std::cout << "[GS] GNSS Buffer contains " << _gnss_buf.size() << " elements." << std::endl;
+        msg << "[GS] GNSS Buffer contains " << _gnss_buf.size() << " elements." << std::endl;
+        std::cout << msg.str();
     }
 
     void sync_process() {
-        std::cout << "\nStarting the GNSS reader thread!\n";
+        std::cout << "\n[GS] Starting the GNSS reader thread!\n";
 
         std::vector<std::shared_ptr<isae::ASensor>> sensors;        
         rcl_time_point_value_t t_last         = 0;
@@ -49,17 +51,18 @@ class GnssSubscriber : public rclcpp::Node {
 
         while (true) {
             if (!_gnss_buf.empty()) {
-                std::cout << "Found GNSS " << " (" << _gnss_buf.size() << " in queue)"  << std::endl;
+                std::cout << "[GS] " << "Found GNSS " << " (" << _gnss_buf.size() << " in queue)"  << std::endl;
                 _gnss_buf.pop();
                 
                 t_curr = this->now().nanoseconds();
-                std::cout << (t_curr - t_last)*1e-9 << " s elapsed since last GNSS measurement" << std::endl;
+                std::cout << "[GS] Current time: " <<  t_curr << std::endl;
+                std::cout << "[GS] " << (t_curr - t_last)*1e-9 << " s elapsed since last GNSS measurement" << std::endl;
                 t_last = t_curr;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
 
-        std::cout << "\n GNSS reader SyncProcess thread is terminating!\n";
+        std::cout << "\n[GS] GNSS reader SyncProcess thread is terminating!\n";
     }
 
     std::string _gnss_topic;

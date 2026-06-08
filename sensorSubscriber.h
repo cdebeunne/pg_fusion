@@ -38,14 +38,20 @@ class SensorSubscriber : public rclcpp::Node {
     void subLeftImage(const sensor_msgs::msg::Image &img_msg) {
         std::lock_guard<std::mutex> lock(_img_mutex);
         _imgs_bufl.push(img_msg);
+
+        std::stringstream  msg;
+        msg << "[PGSS] Current time: " <<  this->now().nanoseconds() << std::endl;
+        msg << "[PGSS] ImgL Buffer contains " << _imgs_bufl.size() << " elements." << std::endl;
+        std::cout << msg.str();
     }
 
     void subUbx(const sensor_msgs::msg::NavSatFix &gnss_msg) {
         // Extract ts from msg
         rclcpp::Time ts            = gnss_msg.header.stamp;
         unsigned long long ts_long = (unsigned long long)ts.nanoseconds();
-        std::cout << "GNSS meas. received. Timestamp: " << ts_long << std::endl;
-        std::cout << "Current time: " <<  this->now().nanoseconds() << std::endl;
+        std::stringstream  msg;
+        msg << "[PGSS] GNSS meas. received. Timestamp: " << ts_long << std::endl;
+        msg << "[PGSS] Current time: " <<  this->now().nanoseconds() << std::endl;
 
         // Build gnss measurement
         std::shared_ptr<GNSSMeas> gnss_meas = std::make_shared<GNSSMeas>();
@@ -60,12 +66,18 @@ class SensorSubscriber : public rclcpp::Node {
 
         // push the message in the buffer
         _gnss_buf.push(gnss_meas);
-        std::cout << "GNSS Buffer contains " << _gnss_buf.size() << " elements." << std::endl;
+        msg << "[PGSS] GNSS Buffer contains " << _gnss_buf.size() << " elements." << std::endl;
+        std::cout << msg.str();
     }
 
     void subRightImage(const sensor_msgs::msg::Image &img_msg) {
         std::lock_guard<std::mutex> lock(_img_mutex);
         _imgs_bufr.push(img_msg);
+
+        std::stringstream  msg;
+        msg << "[PGSS] Current time: " <<  this->now().nanoseconds() << std::endl;
+        msg << "[PGSS] ImgR Buffer contains " << _imgs_bufr.size() << " elements." << std::endl;
+        std::cout << msg.str();
     }
 
     void subIMU(const sensor_msgs::msg::Imu &imu_msg) {
@@ -111,7 +123,7 @@ class SensorSubscriber : public rclcpp::Node {
         unsigned long long ts_gnss_curr = 0;
         rcl_time_point_value_t t_gnss_last = 0;
         rcl_time_point_value_t t_gnss_curr = 0;
-        double time_tol_gnss_s = 0.1;
+        double time_tol_gnss_s = 1;
 
         while (true) {
 
