@@ -58,15 +58,24 @@ class CameraSubscriber : public rclcpp::Node {
     }
 
     void pop(uint cam) {
-        std::lock_guard<std::mutex> lock(_img_mutex);        
-        _imgs_buf.at(cam)->pop();
+        std::lock_guard<std::mutex> lock(_img_mutex);
+        if (_imgs_buf.size() > cam && !_imgs_buf.at(cam)->empty())
+            _imgs_buf.at(cam)->pop();
     }
 
-    bool empty() {        
+    bool emptyAll() {        
         std::lock_guard<std::mutex> lock(_img_mutex);
         bool isEmpty = true;
         for (auto buf : _imgs_buf) {
             isEmpty &= buf->empty();
+        }
+        return isEmpty;
+    }
+    bool emptyAny() {        
+        std::lock_guard<std::mutex> lock(_img_mutex);
+        bool isEmpty = false;
+        for (auto buf : _imgs_buf) {
+            isEmpty |= buf->empty();
         }
         return isEmpty;
     }
@@ -86,34 +95,32 @@ class CameraSubscriber : public rclcpp::Node {
         std::lock_guard<std::mutex> lock(_img_mutex);
         std::vector<rclcpp::Time> t;
         for (auto buf : _imgs_buf) {
-            rclcpp::Time t0 = buf->front().header.stamp;
-            t.push_back(t0);
+            if (!buf->empty()) {
+                 t.push_back(buf->front().header.stamp);
+            } else {
+                 t.push_back(rclcpp::Time(0));
+            }
         }
-        // if (_prov->getNCam() == 2) {
-        //     rclcpp::Time t0 = _imgs_bufl.front().header.stamp;
-        //     rclcpp::Time t1 = _imgs_bufr.front().header.stamp;
-        //     t.push_back(t0);
-        //     t.push_back(t1);
-        // } else{
-        //     rclcpp::Time t0 = _imgs_bufl.front().header.stamp;
-        //     t.push_back(t0);
-        // }
         return t;
     }
 
     cv::Mat getImageMono(uint cam) {
         std::lock_guard<std::mutex> lock(_img_mutex);
         cv::Mat img;
-        img = getImageFromMsg(_imgs_buf.at(cam)->front());
-        _imgs_buf.at(cam)->pop();
+        if (_imgs_buf.size() > cam && !_imgs_buf.at(cam)->empty()) {
+            img = getImageFromMsg(_imgs_buf.at(cam)->front());
+            _imgs_buf.at(cam)->pop();
+        }
         return img;
     }
 
     cv::Mat getGrayImageMono(uint cam) {
         std::lock_guard<std::mutex> lock(_img_mutex);
         cv::Mat img;
-        img = getGrayImageFromMsg(_imgs_buf.at(cam)->front());
-        _imgs_buf.at(cam)->pop();
+        if (_imgs_buf.size() > cam && !_imgs_buf.at(cam)->empty()) {
+            img = getGrayImageFromMsg(_imgs_buf.at(cam)->front());
+            _imgs_buf.at(cam)->pop();
+        }
         return img;
     }
 
@@ -158,18 +165,18 @@ class CameraSubscriber : public rclcpp::Node {
             if (_imgs_buf.size() > 0 && !_imgs_buf.at(0)->empty()) {
                 t_curr = this->now().nanoseconds();
                 std::stringstream msg;
-                msg << "[GS] " << "Found image (prim) " << " (" << _imgs_buf.at(0)->size() << " in queue)"  << std::endl;                
-                msg << "[GS] Current time: " <<  t_curr << std::endl;
-                msg << "[GS] " << (t_curr - t_lastl)*1e-9 << " s elapsed since last prim image" << std::endl;
+                msg << "[CAMERA SUB] " << "Found image (prim) " << " (" << _imgs_buf.at(0)->size() << " in queue)"  << std::endl;                
+                msg << "[CAMERA SUB] Current time: " <<  t_curr << std::endl;
+                msg << "[CAMERA SUB] " << (t_curr - t_lastl)*1e-9 << " s elapsed since last prim image" << std::endl;
                 std::cout << msg.str();
                 t_lastl = t_curr;
             }
             if (_imgs_buf.size() > 1 && !_imgs_buf.at(1)->empty()) {
                 t_curr = this->now().nanoseconds();
                 std::stringstream msg;
-                msg << "[GS] " << "Found image (scnd) " << " (" << _imgs_buf.at(1)->size() << " in queue)"  << std::endl;                
-                msg << "[GS] Current time: " <<  t_curr << std::endl;
-                msg << "[GS] " << (t_curr - t_lastr)*1e-9 << " s elapsed since last scnd image" << std::endl;
+                msg << "[CAMERA SUB] " << "Found image (scnd) " << " (" << _imgs_buf.at(1)->size() << " in queue)"  << std::endl;                
+                msg << "[CAMERA SUB] Current time: " <<  t_curr << std::endl;
+                msg << "[CAMERA SUB] " << (t_curr - t_lastr)*1e-9 << " s elapsed since last scnd image" << std::endl;
                 std::cout << msg.str();
                 t_lastr = t_curr;
             }
@@ -192,8 +199,16 @@ class CameraSubscriber : public rclcpp::Node {
     img_readers_t _imgs_buf;
     std::mutex _img_mutex;
 
-    void subImage(const sensor_msgs::msg::Image &img_msg, int ncam) {        
+    void subImage(const sensor_msgs::msg::Image &img_msg, int ncam) { 
         std::stringstream  msg;
+        msg << "[CAMERA SUB] Got image! " << ncam << std::endl;   
+        // std::cout << msg.str();
+        std::stringstream().swap(msg);   
+
+        if (_imgs_buf.size() <= ncam) {
+            std::cerr << "[CAMERA SUB] No queue available for cam " << ncam << std::endl;
+            return;
+        }
 
         if (_imgs_buf.at(ncam)->size() > __max_buf_len) {
             _imgs_buf.at(ncam)->pop();
@@ -202,10 +217,10 @@ class CameraSubscriber : public rclcpp::Node {
 
         _imgs_buf.at(ncam)->push(img_msg);
 
-        msg << "[PGSS] Current time: " <<  this->now().nanoseconds() << std::endl;
-        msg << "[PGSS] " << _imgs_topics.at(ncam) << " Buffer contains " 
+        msg << "[CAMERA SUB] Current time: " <<  this->now().nanoseconds() << std::endl;
+        msg << "[CAMERA SUB] " << _imgs_topics.at(ncam) << " Buffer contains " 
             << _imgs_buf.at(ncam)->size() << " elements." << std::endl;
-        std::cout << msg.str();
+        // std::cout << msg.str();
     }
 };
 

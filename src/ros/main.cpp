@@ -12,10 +12,10 @@ int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
 
     std::cout << "[PG-main] Launching PG!" << std::endl;
-    for (uint t = 10; t>0; t--) {
-        std::cout << "[PG-main] Wait " << t << " s" << std::endl;
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
+    // for (uint t = 10; t>0; t--) {
+    //     std::cout << "[PG-main] Wait " << t << " s" << std::endl;
+    //     std::this_thread::sleep_for(std::chrono::seconds(1));
+    // }
 
     // load config file
     std::string yaml_path = ament_index_cpp::get_package_share_directory("pg_fusion") + "/config.yaml";
@@ -81,9 +81,10 @@ int main(int argc, char **argv) {
     rv_thread.detach();
 
     // Start a thread for providing new measurements to the SLAM
-    std::thread cam_thread(&CameraSubscriber::sync_process, cam_subscriber);
-    std::thread gnss_thread(&GnssSubscriber::sync_process, gnss_subscriber);
+    // std::thread cam_thread(&CameraSubscriber::sync_process, cam_subscriber);
+    // std::thread gnss_thread(&GnssSubscriber::sync_process, gnss_subscriber);
     std::thread sync_thread(&SensorSubscriber::sync_process, sensor_subscriber);
+    sync_thread.detach();
 
     rclcpp::executors::MultiThreadedExecutor mt_executor;
     mt_executor.add_node(sensor_subscriber);

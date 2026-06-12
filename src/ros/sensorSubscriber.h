@@ -49,7 +49,7 @@ class SensorSubscriber : public rclcpp::Node {
     // }
 
     void sync_process() {
-        std::cout << "\nStarting the measurements reader thread!\n";
+        std::cout << "\n[PG] Starting the measurements reader thread!\n";
 
         std::vector<std::shared_ptr<isae::ASensor>> sensors;
         double time_tolerance = 0.0025; // TODO add this as a parameter of the yaml
@@ -59,7 +59,7 @@ class SensorSubscriber : public rclcpp::Node {
         unsigned long long ts_gnss_curr = 0;
         rcl_time_point_value_t t_gnss_last = 0;
         rcl_time_point_value_t t_gnss_curr = 0;
-        double time_tol_gnss_s = 1;
+        double time_tol_gnss_s = 60;
 
         while (true) {
             // GNSS message
@@ -72,10 +72,10 @@ class SensorSubscriber : public rclcpp::Node {
 
             // Case Stereo
             if (_prov->getNCam() == 2) {
-                if (!_cam_sub->empty()) {
+                if (!_cam_sub->emptyAny()) {
 
                     std::stringstream msg;
-                    msg << "Found STEREO image in buffer! " 
+                    msg << "[PGSS] Found STEREO image in buffer! " 
                         << "(" << _cam_sub->size(0) << "|" << _cam_sub->size(1) << ")" << std::endl;
                     std::cout << msg.str();
 
@@ -86,7 +86,7 @@ class SensorSubscriber : public rclcpp::Node {
                     t_curr       = time0;
 
                     std::stringstream().swap(msg);
-                    msg << "Frame timestamp: " << t_curr << std::endl;
+                    msg << "[PGSS] Frame timestamp: " << t_curr << std::endl;
                     std::cout << msg.str();
 
                     // sync tolerance
@@ -105,12 +105,14 @@ class SensorSubscriber : public rclcpp::Node {
                             std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
                             f->init(sensors, t_last);
 
+                            std::cout << "[PGSS] GNSS queue contains: " << _gnss_sub->size() << " elements" << std::endl;
+
                             // Add a gnss measurement if available and images in the frame
                             if (_gnss_sub->empty() || f->getSensors().empty()) {
                                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
 
                                 std::stringstream().swap(msg);
-                                msg << "Created NF (stereo) " << " (" << _pipe->_nf_queue.size() << "in queue)" << std::endl;
+                                msg << "[PGSS] Created NF (stereo) " << " (" << _pipe->_nf_queue.size() << "in queue)" << std::endl;
                                 std::cout << msg.str();
                             } else {
                                 
@@ -119,21 +121,27 @@ class SensorSubscriber : public rclcpp::Node {
                                 // otherwise delayed measurements can ruin the graph
                                 ts_gnss_curr = _gnss_sub->getTimeStamp();
                                 t_gnss_curr = this->now().nanoseconds();
+                                double dt = std::abs((ts_gnss_curr - ts_gnss_last)*1e-9 - (t_gnss_curr - t_gnss_last)*1e-9);
                                 if (ts_gnss_last && // initial value is zero
-                                    std::abs((ts_gnss_curr - ts_gnss_last)*1e-9 - (t_gnss_curr - t_gnss_last)*1e-9) > time_tol_gnss_s)
+                                     dt > time_tol_gnss_s)
                                 {
                                     _gnss_sub->pop();
                                     std::stringstream().swap(msg);
                                     msg << "############################################################" << std::endl;
-                                    msg << "Discarded NF (stereo | GNSS) " << " (" << std::abs((ts_gnss_curr - ts_gnss_last)*1e-9 - (t_gnss_curr - t_gnss_last)*1e-9) << " s)"  << std::endl;
+                                    msg << "[PGSS] Discarded NF (stereo | GNSS) " << " (" << dt << " s)"  << std::endl;
                                     msg << "############################################################" << std::endl;
                                     std::cout << msg.str();
                                 } 
                                 else
                                 {
-                                    _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_sub->getMeas()));
+                                    std::shared_ptr<GNSSMeas> gnss_meas = _gnss_sub->getMeas();
+                                    if (gnss_meas)
+                                        _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, gnss_meas));
+                                    else
+                                        std::cerr << "[PGSS] GNSS queue is not empty, but no measurement was obtained!" << std::endl;
+
                                     std::stringstream().swap(msg);
-                                    msg << "Created NF (stereo | GNSS) " << " (" << _pipe->_nf_queue.size() << " in queue)"  << std::endl;
+                                    msg << "[PGSS] Created NF (stereo | GNSS) " << " (" << _pipe->_nf_queue.size() << " in queue)"  << std::endl;
                                     std::cout << msg.str();
                                 }
                                 ts_gnss_last = ts_gnss_curr;
@@ -144,26 +152,32 @@ class SensorSubscriber : public rclcpp::Node {
                         } else {
                             if (std::abs(t_curr*1e-9 - t_last*1e-9) <= time_tolerance) {
                                 std::stringstream().swap(msg);
-                                msg << "Time tolerance violated: " << std::abs(t_curr*1e-9 - t_last*1e-9) << " <= " << time_tolerance << std::endl;
+                                msg << "[PGSS] Time tolerance violated: " << std::abs(t_curr*1e-9 - t_last*1e-9) << " <= " << time_tolerance << std::endl;
                                 std::cout << msg.str();
                             }
                             if (sensors.empty()) {
                                 std::stringstream().swap(msg);
-                                msg << "Sensors empty!" << std::endl;
+                                msg << "[PGSS] Sensors empty!" << std::endl;
                                 std::cout << msg.str();
                             }
                         }
 
 
                         image0 = _cam_sub->getGrayImageMono(0);
-                        imgs.push_back(image0);
+                        if (!image0.empty())
+                            imgs.push_back(image0);
 
-                        image0 = _cam_sub->getGrayImageMono(1);
-                        imgs.push_back(image1);
+                        image1 = _cam_sub->getGrayImageMono(1);
+                        if (!image1.empty())
+                            imgs.push_back(image1);
 
-                        img_sensors = _prov->createImageSensors(imgs);
-                        sensors.push_back(img_sensors.at(0));
-                        sensors.push_back(img_sensors.at(1));
+                        if (!imgs.empty())
+                            img_sensors = _prov->createImageSensors(imgs);
+
+                        if (!img_sensors.empty()) {
+                            sensors.push_back(img_sensors.at(0));
+                            sensors.push_back(img_sensors.at(1));
+                        }
                     }
 
                     t_last = t_curr;

@@ -61,13 +61,14 @@ std::shared_ptr<NavFrame> Pipeline::next()
 
 void Pipeline::init()
 {
-    std::cout << "Pipeline init" << std::endl;
+    std::cout << "[PG] Pipeline init" << std::endl;
 
     // Init SLAM
     while (!_slam->_is_init)
     {
         _nf = next();
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
+        std::cout << "[PG-init] Added first frame to SLAM" << std::endl;
     }
 
     // Wait for a frame with GPS
@@ -78,29 +79,58 @@ void Pipeline::init()
         // Set KF if GNSS meas
         if (_nf->_gnss_meas != nullptr)
         {
+            std::cout << "[PG-init] Found GNSS NF" << std::endl;
+
             __t_offset_gnss_img = _nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9;
-            std::cout << "GNSS/Camera offset [s]: " << __t_offset_gnss_img << std::endl;
+            std::cout << "############################################################" << std::endl;                                    
+            std::cout << "[PG-init] GNSS/Camera offset [s]: " << __t_offset_gnss_img << std::endl;
+            std::cout << "############################################################" << std::endl; 
             _nf->_frame->setKeyFrame();
+            std::cout << "[PG-init] SLAM last Keyframe ID: " << _slam->getLastKF()->_id << std::endl;
         }
 
+        std::cout << "[PG-init] Found Stereo NF" << std::endl;
+
+        std::stringstream msg;
+        msg << "[PG-pipeline] NavFrame: " << std::endl;
+        msg << "[PG-pipeline] N Sensors: " << _nf->_frame->getSensors().size() << std::endl;
+        if (_nf->_frame->getSensors().size() > 0)
+            msg << "[PG-pipeline] Image 0 is empty? " << _nf->_frame->getSensors().at(0)->getRawData().empty() << std::endl;
+        if (_nf->_frame->getSensors().size() > 1)
+            msg << "[PG-pipeline] Image 1 is empty? " << _nf->_frame->getSensors().at(1)->getRawData().empty() << std::endl;
+        msg << "[PG-pipeline] Timestamp: " << _nf->_frame->getTimestamp() << std::endl;
+        msg << "[PG-pipeline] Is KF?" << _nf->_frame->isKeyFrame() << std::endl;
+        std::cout << msg.str();
+        
+        // send the first frame to the SLAM
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
-        std::cout << "Found GNSS NF" << std::endl;
     }
+    std::cout << "[PG-init] Continue after GNSS acquired ..." << std::endl;
+    std::cout << "[PG-init] PG frame ID: " << _nf->_frame->_id << std::endl;
 
     // Get the ouput from the SLAM
-    std::shared_ptr<isae::Frame> frame_ready = _slam->_frame_to_display;
+    std::shared_ptr<isae::Frame> frame_ready = _slam->_frame_to_display;    
+    uint counter = 0;
     while (frame_ready != _nf->_frame)
     {
         frame_ready = _slam->_frame_to_display;
+        if (_slam->_frame_to_display) {
+            std::cout << "[PG-init] SLAM frame " << _slam->_frame_to_display << std::endl;
+            _slam->_frame_to_display = nullptr;
+        }
 
         // If the SLAM is not initialized, reinitialize
         if (!_slam->_is_init)
         {
+            std::cout << "[PG-init] SLAM was not init!" << std::endl;
             _is_init = false;
             return;
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if (counter % 1000 == 0) 
+            std::cout << "[PG-init] Waiting for SLAM ..." << std::endl;
+        counter++;
     }
 
     // Save the pose in the SLAM frame
@@ -113,6 +143,7 @@ void Pipeline::init()
         Eigen::Affine3d T_n_a = Eigen::Affine3d::Identity();
         _nf->_T_n_f = T_n_a * _T_a_f;
     }
+    std::cout << "[PG-init] Set the reference frame!" << std::endl;
 
     // add absolute pose contraint
     AbsolutePoseFactor af;
@@ -121,10 +152,12 @@ void Pipeline::init()
     af.inf = 100 * Eigen::MatrixXd::Identity(6, 6);
     _pg->_nf_abspose_map.emplace(_nf, af);
 
+    std::cout << "[PG-init] Emplace first NF ..." << std::endl;
     // Add to the nav frame vector
     _nav_frames.push_back(_nf);
 
     // Calibrate the orientation
+    std::cout << "[PG-init] Calibrate ..." << std::endl;
 
     // Add frames until a reasonable displacement is performed
     while (_nf->_T_n_f.translation().norm() < 3)
@@ -138,6 +171,7 @@ void Pipeline::init()
 
     profiling();
 
+    std::cout << "[PG-init] PoseGraphFusion initialized!" << std::endl;
     _is_init = true;
 }
 
@@ -155,8 +189,10 @@ void Pipeline::step()
         _nf = next();
 
         // Ignore if IMU only
-        if (_nf->_frame->getSensors().size() == 0)
+        if (_nf->_frame->getSensors().size() == 0) {
+            std::cerr << "[PG-pipeline] Warning: No sensors in NF!" << std::endl;
             continue;
+        }
 
         // Set KF if GNSS meas
         if (_nf->_gnss_meas != nullptr) 
@@ -166,7 +202,7 @@ void Pipeline::step()
             if (std::abs(_nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9 - __t_offset_gnss_img) > time_tol_gnss_s)
             {
                 std::cout << "############################################################" << std::endl;                                    
-                std::cout << "Throw IMG/GNSS Sync error: " 
+                std::cout << "[PG-pipeline] Throw IMG/GNSS Sync error: " 
                         << "(" << (_nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9) << ") " 
                         << "[" << __t_offset_gnss_img << "] " 
                         << _nf->_gnss_meas->ts_long << " | " << _nf->_frame->getTimestamp() << std::endl;
@@ -177,16 +213,28 @@ void Pipeline::step()
             else
             {
                 _nf->_frame->setKeyFrame();
-                std::cout << "Found GNSS NF" << std::endl;
+                std::cout << "[PG-pipeline] Found GNSS NF" << std::endl;
             }
         }
 
         // Send frame to the SLAM
+        std::stringstream msg;
+        msg << "[PG-pipeline] NavFrame: " << std::endl;
+        msg << "[PG-pipeline] N Sensors: " << _nf->_frame->getSensors().size() << std::endl;
+        if (_nf->_frame->getSensors().size() > 0)
+            msg << "[PG-pipeline] Image 0 is empty? " << _nf->_frame->getSensors().at(0)->getRawData().empty() << std::endl;
+        if (_nf->_frame->getSensors().size() > 1)
+            msg << "[PG-pipeline] Image 1 is empty? " << _nf->_frame->getSensors().at(1)->getRawData().empty() << std::endl;
+        msg << "[PG-pipeline] Timestamp: " << _nf->_frame->getTimestamp() << std::endl;
+        msg << "[PG-pipeline] Is KF?" << _nf->_frame->isKeyFrame() << std::endl;
+        std::cout << msg.str();
+
         // (with or without GNSS, any data is good)
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
 
         // Get the ouput from the SLAM
         std::shared_ptr<isae::Frame> frame_ready = _slam->_frame_to_display;
+        uint counter = 0;
         while (frame_ready != _nf->_frame)
         {
             frame_ready = _slam->_frame_to_display;
@@ -194,14 +242,21 @@ void Pipeline::step()
             // If the SLAM is not initialized, reinitialize
             if (!_slam->_is_init)
             {
+                std::cout << "[PG-pipeline] SLAM is not init!" << std::endl;
                 _is_init = false;
                 return;
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            counter++;
+            if (!(counter % 1000)) {
+                std::cerr << "[PG-pipeline] Waited too long!" << std::endl;
+            }
+
         }
 
         _nf->_T_w_f = frame_ready->getFrame2WorldTransform();
+        std::cout << "[PG-pipeline] SLAM Frame is ready!" << std::endl;
 
         // Compute the current pose
         Eigen::Affine3d T_n_flast = _nav_frames.back()->_T_n_f;
@@ -251,13 +306,13 @@ void Pipeline::step()
         }
 
         _pg->_nf_absfact_map.emplace(_nf, af);
-        std::cout << "af" << std::endl;
+        std::cout << "[PG-pipeline] af" << std::endl;
         std::cout << af.t.matrix() << std::endl;
         std::cout << af.inf.matrix() << std::endl;
     }
     else
     {
-        std::cout << "GPS not used. Cov.: " << _nf->_gnss_meas->cov.norm() << std::endl;
+        std::cout << "[PG-pipeline] GPS not used. Cov.: " << _nf->_gnss_meas->cov.norm() << std::endl;
     }
 
     // add relative pose constraints if the VIO is initialized
@@ -292,19 +347,19 @@ void Pipeline::step()
             }
             else
             {
-                std::cout << "SLAM input for relativ factor is !finite" << std::endl;
+                std::cout << "[PG-pipeline] SLAM input for relativ factor is !finite" << std::endl;
                 // std::cout << "rf" << std::endl;
                 // std::cout << rf.T_a_b.matrix() << std::endl;
                 // std::cout << rf.inf.matrix() << std::endl;
             }
-            std::cout << "rf" << std::endl;
+            std::cout << "[PG-pipeline] rf" << std::endl;
             std::cout << rf.T_a_b.matrix() << std::endl;
             std::cout << rf.inf.matrix() << std::endl;
         } 
         else
         {
-            std::cout << "SLAM could not compute relative pose factor!" << std::endl;
-            std::cout << "rf" << std::endl;
+            std::cout << "[PG-pipeline] SLAM could not compute relative pose factor!" << std::endl;
+            std::cout << "[PG-pipeline] rf" << std::endl;
             std::cout << rf.T_a_b.matrix() << std::endl;
         }
 
@@ -323,23 +378,23 @@ void Pipeline::step()
     if (_pg->_nf_absfact_map.size() > _window_size)
     {
         // Marginalize
-        std::cout << "Marginalizing PG ..." << std::endl;
+        std::cout << "[PG-pipeline] Marginalizing PG ..." << std::endl;
         _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
         _removed_vo_poses.push_back(
             {_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_w * _nav_frames.front()->_T_w_f});
         _pg->marginalize(_nav_frames.front());
         _nav_frames.pop_front();
-        std::cout << "PG Marginalized!" << std::endl;
+        std::cout << "[PG-pipeline] PG Marginalized!" << std::endl;
     }
 
     // Solve pg
     if (_is_init)
     {
-        std::cout << "Solving PG ..." << std::endl;        
+        std::cout << "[PG-pipeline] Solving PG ..." << std::endl;        
         updateRelativeFactors();
         if (!_pg->solveGraph())
         {
-            std::cout << "Solver failed -- Breakpoint" << std::endl;
+            std::cout << "[PG-pipeline] Solver failed -- Breakpoint" << std::endl;
             throw std::runtime_error("TERMINATING AFTER SOLVER FAILURE");
         }
         profiling();

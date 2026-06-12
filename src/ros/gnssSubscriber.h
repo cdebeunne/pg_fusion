@@ -18,6 +18,7 @@ class GnssSubscriber : public rclcpp::Node {
         : Node("gnss_subscriber"), _gnss_topic(gnss_topic) {
         _subscription_gnss = this->create_subscription<sensor_msgs::msg::NavSatFix>(
             gnss_topic, 10, std::bind(&GnssSubscriber::subUbx, this, std::placeholders::_1));
+        std::cout << "[PG] Listening to: " << _gnss_topic << std::endl;
     }
 
     void subUbx(const sensor_msgs::msg::NavSatFix &gnss_msg) {
@@ -26,8 +27,8 @@ class GnssSubscriber : public rclcpp::Node {
         rclcpp::Time ts            = gnss_msg.header.stamp;
         unsigned long long ts_long = (unsigned long long)ts.nanoseconds();
         std::stringstream  msg;
-        msg << "[GS] GNSS meas. received. Timestamp: " << ts_long << std::endl;
-        msg << "[GS] Current time: " <<  this->now().nanoseconds() << std::endl;
+        msg << "[GNSS SUB] GNSS meas. received. Timestamp: " << ts_long << std::endl;
+        msg << "[GNSS SUB] Current time: " <<  this->now().nanoseconds() << std::endl;
 
         // Build gnss measurement
         std::shared_ptr<GNSSMeas> gnss_meas = std::make_shared<GNSSMeas>();
@@ -47,13 +48,15 @@ class GnssSubscriber : public rclcpp::Node {
         }
         _gnss_buf.push(gnss_meas);
 
-        msg << "[GS] GNSS Buffer contains " << _gnss_buf.size() << " elements." << std::endl;
+        msg << "[GNSS SUB] GNSS Buffer contains " << _gnss_buf.size() << " elements." << std::endl;
         std::cout << msg.str();
     }
 
     void pop() {
-        std::lock_guard<std::mutex> lock(_gnss_mutex);        
-        _gnss_buf.pop();
+        std::lock_guard<std::mutex> lock(_gnss_mutex);      
+        if (!_gnss_buf.empty()) {
+            _gnss_buf.pop();
+        }
     }
 
     bool empty() {        
@@ -68,13 +71,20 @@ class GnssSubscriber : public rclcpp::Node {
 
     unsigned long long getTimeStamp() {
         std::lock_guard<std::mutex> lock(_gnss_mutex);
-        return _gnss_buf.front()->ts_long;
+        unsigned long long t = 0;
+        if (!_gnss_buf.empty()) {
+            t = _gnss_buf.front()->ts_long;
+        }
+        return t;
     }
 
     std::shared_ptr<GNSSMeas> getMeas() {
         std::lock_guard<std::mutex> lock(_gnss_mutex);
-        std::shared_ptr<GNSSMeas> meas = _gnss_buf.front();
-        _gnss_buf.pop();
+        std::shared_ptr<GNSSMeas> meas = nullptr;
+        if (!_gnss_buf.empty()) {
+            meas = _gnss_buf.front();
+            _gnss_buf.pop();
+        }
         return meas;
     }
 
@@ -87,18 +97,18 @@ class GnssSubscriber : public rclcpp::Node {
 
         while (true) {
             if (!_gnss_buf.empty()) {
-                std::cout << "[GS] " << "Found GNSS " << " (" << _gnss_buf.size() << " in queue)"  << std::endl;
+                std::cout << "[GNSS SUB] " << "Found GNSS " << " (" << _gnss_buf.size() << " in queue)"  << std::endl;
                 // _gnss_buf.pop();
                 
                 t_curr = this->now().nanoseconds();
-                std::cout << "[GS] Current time: " <<  t_curr << std::endl;
-                std::cout << "[GS] " << (t_curr - t_last)*1e-9 << " s elapsed since last GNSS measurement" << std::endl;
+                std::cout << "[GNSS SUB] Current time: " <<  t_curr << std::endl;
+                std::cout << "[GNSS SUB] " << (t_curr - t_last)*1e-9 << " s elapsed since last GNSS measurement" << std::endl;
                 t_last = t_curr;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
 
-        std::cout << "\n[GS] GNSS reader SyncProcess thread is terminating!\n";
+        std::cout << "\n[GNSS SUB] GNSS reader SyncProcess thread is terminating!\n";
     }
 
   protected:
