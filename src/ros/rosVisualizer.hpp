@@ -22,7 +22,7 @@ class RosVisualizer : public rclcpp::Node {
 
   public:
     RosVisualizer() : Node("pg_publisher") {
-        std::cout << "\n Creation of ROS vizualizer" << std::endl;
+        std::cout << "\n[PG] Creation of ROS vizualizer" << std::endl;
 
         _pub_traj       = this->create_publisher<visualization_msgs::msg::Marker>("pg/traj", 1000);
         _pub_traj_vo    = this->create_publisher<visualization_msgs::msg::Marker>("pg/vo/traj", 1000);

@@ -4,6 +4,8 @@
 #include <mutex>
 #include <thread>
 
+#include "gnssSubscriber.h"
+#include "cameraSubscriber.h"
 #include "pipeline.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
@@ -15,102 +17,36 @@
 class SensorSubscriber : public rclcpp::Node {
 
   public:
-    SensorSubscriber(std::shared_ptr<isae::ADataProvider> prov, std::shared_ptr<Pipeline> pipe, std::string gnss_topic)
-        : Node("sensor_subscriber"), _prov(prov), _pipe(pipe), _gnss_topic(gnss_topic) {
-
-        _cam_l_topic       = _prov->getCamConfigs().at(0)->ros_topic;
-        _subscription_left = this->create_subscription<sensor_msgs::msg::Image>(
-            _cam_l_topic, 10, std::bind(&SensorSubscriber::subLeftImage, this, std::placeholders::_1));
-        _subscription_gnss = this->create_subscription<sensor_msgs::msg::NavSatFix>(
-            gnss_topic, 10, std::bind(&SensorSubscriber::subUbx, this, std::placeholders::_1));
-        if (_prov->getNCam() == 2) {
-            _cam_r_topic        = prov->getCamConfigs().at(1)->ros_topic;
-            _subscription_right = this->create_subscription<sensor_msgs::msg::Image>(
-                _cam_r_topic, 10, std::bind(&SensorSubscriber::subRightImage, this, std::placeholders::_1));
-        }
-        if (_prov->getIMUConfig()) {
-            _imu_topic        = _prov->getIMUConfig()->ros_topic;
-            _subscription_imu = this->create_subscription<sensor_msgs::msg::Imu>(
-                _imu_topic, 10, std::bind(&SensorSubscriber::subIMU, this, std::placeholders::_1));
-        }
+    SensorSubscriber(std::shared_ptr<isae::ADataProvider> prov, std::shared_ptr<Pipeline> pipe, 
+    std::shared_ptr<CameraSubscriber> cam_sub, std::shared_ptr<GnssSubscriber> gnss_sub)
+        : Node("sensor_subscriber"), _prov(prov), _pipe(pipe), _cam_sub(cam_sub), _gnss_sub(gnss_sub) {
+        // if (_prov->getIMUConfig()) {
+        //     _imu_topic        = _prov->getIMUConfig()->ros_topic;
+        //     _subscription_imu = this->create_subscription<sensor_msgs::msg::Imu>(
+        //         _imu_topic, 10, std::bind(&SensorSubscriber::subIMU, this, std::placeholders::_1));
+        // }
     }
 
-    void subLeftImage(const sensor_msgs::msg::Image &img_msg) {
-        std::lock_guard<std::mutex> lock(_img_mutex);
-        _imgs_bufl.push(img_msg);
+    // void subIMU(const sensor_msgs::msg::Imu &imu_msg) {
+    //     std::lock_guard<std::mutex> lock(_imu_mutex);
+    //     _imu_buf.push(imu_msg);
+    // }
 
-        std::stringstream  msg;
-        msg << "[PGSS] Current time: " <<  this->now().nanoseconds() << std::endl;
-        msg << "[PGSS] ImgL Buffer contains " << _imgs_bufl.size() << " elements." << std::endl;
-        std::cout << msg.str();
-    }
 
-    void subUbx(const sensor_msgs::msg::NavSatFix &gnss_msg) {
-        // Extract ts from msg
-        rclcpp::Time ts            = gnss_msg.header.stamp;
-        unsigned long long ts_long = (unsigned long long)ts.nanoseconds();
-        std::stringstream  msg;
-        msg << "[PGSS] GNSS meas. received. Timestamp: " << ts_long << std::endl;
-        msg << "[PGSS] Current time: " <<  this->now().nanoseconds() << std::endl;
+    // void getImuInfoFromMsg(const sensor_msgs::msg::Imu &imu_msg, Eigen::Vector3d &acc, Eigen::Vector3d &gyr) {
 
-        // Build gnss measurement
-        std::shared_ptr<GNSSMeas> gnss_meas = std::make_shared<GNSSMeas>();
-        gnss_meas->llh_meas =
-            Eigen::Vector3d((double)gnss_msg.latitude, (double)gnss_msg.longitude, (double)gnss_msg.altitude);
-        gnss_meas->cov     = Eigen::Vector3d((double)gnss_msg.position_covariance[0],
-                                         (double)gnss_msg.position_covariance[4],
-                                         (double)gnss_msg.position_covariance[8]);
-        gnss_meas->status  = gnss_msg.status.status;
-        gnss_meas->service = gnss_msg.status.service;
-        gnss_meas->ts_long = ts_long;
+    //     // Extract the acceleration and gyroscope values from the IMU message
+    //     double ax = imu_msg.linear_acceleration.x;
+    //     double ay = imu_msg.linear_acceleration.y;
+    //     double az = imu_msg.linear_acceleration.z;
+    //     double gx = imu_msg.angular_velocity.x;
+    //     double gy = imu_msg.angular_velocity.y;
+    //     double gz = imu_msg.angular_velocity.z;
 
-        // push the message in the buffer
-        _gnss_buf.push(gnss_meas);
-        msg << "[PGSS] GNSS Buffer contains " << _gnss_buf.size() << " elements." << std::endl;
-        std::cout << msg.str();
-    }
-
-    void subRightImage(const sensor_msgs::msg::Image &img_msg) {
-        std::lock_guard<std::mutex> lock(_img_mutex);
-        _imgs_bufr.push(img_msg);
-
-        std::stringstream  msg;
-        msg << "[PGSS] Current time: " <<  this->now().nanoseconds() << std::endl;
-        msg << "[PGSS] ImgR Buffer contains " << _imgs_bufr.size() << " elements." << std::endl;
-        std::cout << msg.str();
-    }
-
-    void subIMU(const sensor_msgs::msg::Imu &imu_msg) {
-        std::lock_guard<std::mutex> lock(_imu_mutex);
-        _imu_buf.push(imu_msg);
-    }
-
-    cv::Mat getGrayImageFromMsg(const sensor_msgs::msg::Image &img_msg) {
-        // Get and prepare images
-        cv_bridge::CvImagePtr ptr;
-        try {
-            ptr = cv_bridge::toCvCopy(img_msg, "mono8");
-        } catch (cv_bridge::Exception &e) {
-            std::cout << "\n\n\ncv_bridge exeception: %s\n\n\n" << e.what() << std::endl;
-        }
-
-        return ptr->image;
-    }
-
-    void getImuInfoFromMsg(const sensor_msgs::msg::Imu &imu_msg, Eigen::Vector3d &acc, Eigen::Vector3d &gyr) {
-
-        // Extract the acceleration and gyroscope values from the IMU message
-        double ax = imu_msg.linear_acceleration.x;
-        double ay = imu_msg.linear_acceleration.y;
-        double az = imu_msg.linear_acceleration.z;
-        double gx = imu_msg.angular_velocity.x;
-        double gy = imu_msg.angular_velocity.y;
-        double gz = imu_msg.angular_velocity.z;
-
-        // Create an Eigen vector for the acceleration and gyroscope values
-        acc << ax, ay, az;
-        gyr << gx, gy, gz;
-    }
+    //     // Create an Eigen vector for the acceleration and gyroscope values
+    //     acc << ax, ay, az;
+    //     gyr << gx, gy, gz;
+    // }
 
     void sync_process() {
         std::cout << "\nStarting the measurements reader thread!\n";
@@ -126,6 +62,8 @@ class SensorSubscriber : public rclcpp::Node {
         double time_tol_gnss_s = 1;
 
         while (true) {
+            // GNSS message
+            // GNSSMeas gnss_fix;
 
             // Image messages
             cv::Mat image0, image1;
@@ -134,22 +72,29 @@ class SensorSubscriber : public rclcpp::Node {
 
             // Case Stereo
             if (_prov->getNCam() == 2) {
-                if (!_imgs_bufl.empty() && !_imgs_bufr.empty()) {
-                    std::cout << "Found STEREO image in buffer! " 
-                        << "(" << _imgs_bufl.size() << "|" << _imgs_bufr.size() << ")" << std::endl;
-                    rclcpp::Time t0 = _imgs_bufl.front().header.stamp;
-                    rclcpp::Time t1 = _imgs_bufr.front().header.stamp;
-                    unsigned long long time0 = t0.nanoseconds();
-                    unsigned long long time1 = t1.nanoseconds();
+                if (!_cam_sub->empty()) {
+
+                    std::stringstream msg;
+                    msg << "Found STEREO image in buffer! " 
+                        << "(" << _cam_sub->size(0) << "|" << _cam_sub->size(1) << ")" << std::endl;
+                    std::cout << msg.str();
+
+                    // other threads can add to, but 
+                    std::vector<rclcpp::Time> t = _cam_sub->getTimeStamps();
+                    unsigned long long time0 = t.at(0).nanoseconds();
+                    unsigned long long time1 = t.at(1).nanoseconds();
                     t_curr       = time0;
-                    std::cout << "Frame timestamp: " << t_curr << std::endl;
+
+                    std::stringstream().swap(msg);
+                    msg << "Frame timestamp: " << t_curr << std::endl;
+                    std::cout << msg.str();
 
                     // sync tolerance
                     if (time0 < time1 - 25000000) {
-                        _imgs_bufl.pop();
+                        _cam_sub->pop(0);
                         std::cout << "\n Throw img0 -- Sync error : " << (time0 - time1) << "\n";
                     } else if (time0 > time1 + 25000000) {
-                        _imgs_bufr.pop();
+                        _cam_sub->pop(1);
                         std::cout << "\n Throw img1 -- Sync error : " << (time0 - time1) << "\n";
                     } else {
 
@@ -161,29 +106,35 @@ class SensorSubscriber : public rclcpp::Node {
                             f->init(sensors, t_last);
 
                             // Add a gnss measurement if available and images in the frame
-                            if (_gnss_buf.empty() || f->getSensors().empty()) {
+                            if (_gnss_sub->empty() || f->getSensors().empty()) {
                                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
-                                std::cout << "Created NF (stereo) " << " (" << _pipe->_nf_queue.size() << "in queue)" << std::endl;
+
+                                std::stringstream().swap(msg);
+                                msg << "Created NF (stereo) " << " (" << _pipe->_nf_queue.size() << "in queue)" << std::endl;
+                                std::cout << msg.str();
                             } else {
                                 
                                 // check if the step between two GNSS measurement timestamps 
                                 // is similar to the step in wall time
                                 // otherwise delayed measurements can ruin the graph
-                                ts_gnss_curr = _gnss_buf.front()->ts_long;
+                                ts_gnss_curr = _gnss_sub->getTimeStamp();
                                 t_gnss_curr = this->now().nanoseconds();
                                 if (ts_gnss_last && // initial value is zero
                                     std::abs((ts_gnss_curr - ts_gnss_last)*1e-9 - (t_gnss_curr - t_gnss_last)*1e-9) > time_tol_gnss_s)
                                 {
-                                    _gnss_buf.pop();
-                                    std::cout << "############################################################" << std::endl;
-                                    std::cout << "Discarded NF (stereo | GNSS) " << " (" << std::abs((ts_gnss_curr - ts_gnss_last)*1e-9 - (t_gnss_curr - t_gnss_last)*1e-9) << " s)"  << std::endl;
-                                    std::cout << "############################################################" << std::endl;
+                                    _gnss_sub->pop();
+                                    std::stringstream().swap(msg);
+                                    msg << "############################################################" << std::endl;
+                                    msg << "Discarded NF (stereo | GNSS) " << " (" << std::abs((ts_gnss_curr - ts_gnss_last)*1e-9 - (t_gnss_curr - t_gnss_last)*1e-9) << " s)"  << std::endl;
+                                    msg << "############################################################" << std::endl;
+                                    std::cout << msg.str();
                                 } 
                                 else
                                 {
-                                    _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
-                                    _gnss_buf.pop();
-                                    std::cout << "Created NF (stereo | GNSS) " << " (" << _pipe->_nf_queue.size() << " in queue)"  << std::endl;
+                                    _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_sub->getMeas()));
+                                    std::stringstream().swap(msg);
+                                    msg << "Created NF (stereo | GNSS) " << " (" << _pipe->_nf_queue.size() << " in queue)"  << std::endl;
+                                    std::cout << msg.str();
                                 }
                                 ts_gnss_last = ts_gnss_curr;
                                 t_gnss_last = t_gnss_curr;
@@ -192,21 +143,22 @@ class SensorSubscriber : public rclcpp::Node {
                             sensors.clear();
                         } else {
                             if (std::abs(t_curr*1e-9 - t_last*1e-9) <= time_tolerance) {
-                                std::cout << "Time tolerance violated: " << std::abs(t_curr*1e-9 - t_last*1e-9) << " <= " << time_tolerance << std::endl;
+                                std::stringstream().swap(msg);
+                                msg << "Time tolerance violated: " << std::abs(t_curr*1e-9 - t_last*1e-9) << " <= " << time_tolerance << std::endl;
+                                std::cout << msg.str();
                             }
                             if (sensors.empty()) {
-                                std::cout << "Sensors empty!" << std::endl;
+                                std::stringstream().swap(msg);
+                                msg << "Sensors empty!" << std::endl;
+                                std::cout << msg.str();
                             }
                         }
 
-                        _img_mutex.lock();
-                        image0 = getGrayImageFromMsg(_imgs_bufl.front());
-                        image1 = getGrayImageFromMsg(_imgs_bufr.front());
-                        _imgs_bufl.pop();
-                        _imgs_bufr.pop();
-                        _img_mutex.unlock();
 
+                        image0 = _cam_sub->getGrayImageMono(0);
                         imgs.push_back(image0);
+
+                        image0 = _cam_sub->getGrayImageMono(1);
                         imgs.push_back(image1);
 
                         img_sensors = _prov->createImageSensors(imgs);
@@ -218,80 +170,88 @@ class SensorSubscriber : public rclcpp::Node {
                 }
 
                 // Case mono
-            } else {
-                if (!_imgs_bufl.empty()) {
-                    std::cout << "Found MONO image in buffer! " 
-                        << "(" << _imgs_bufl.size() << ")" << std::endl;
-                    std::lock_guard<std::mutex> lock(_img_mutex);
-                    t_curr = _imgs_bufl.front().header.stamp.sec * 1e9 + _imgs_bufl.front().header.stamp.nanosec;
+            } 
+            // else 
+            // {
+            //     if (!_imgs_bufl.empty()) {
+            //         std::stringstream msg;
+            //         msg << "Found MONO image in buffer! " 
+            //             << "(" << _imgs_bufl.size() << ")" << std::endl;
+            //         std::cout << msg.str();
+            //         std::lock_guard<std::mutex> lock(_img_mutex);
+            //         t_curr = _imgs_bufl.front().header.stamp.sec * 1e9 + _imgs_bufl.front().header.stamp.nanosec;
 
-                    // Check if this measurement can be added to the current frame
-                    if (std::abs(t_curr*1e-9 - t_last*1e-9) > time_tolerance && !sensors.empty()) {
+            //         // Check if this measurement can be added to the current frame
+            //         if (std::abs(t_curr*1e-9 - t_last*1e-9) > time_tolerance && !sensors.empty()) {
 
-                        // Create a frame with the stored sensors
-                        std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
-                        f->init(sensors, t_last);
+            //             // Create a frame with the stored sensors
+            //             std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
+            //             f->init(sensors, t_last);
 
-                        // Add a gnss measurement if available and images in the frame
-                        if (_gnss_buf.empty() || f->getSensors().empty()) {
-                            _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
-                            std::cout << "Created NF (mono) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
-                        } else {
-                            _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
-                            _gnss_buf.pop();
-                            std::cout << "Created NF (mono | GNSS) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
-                        }
+            //             // Add a gnss measurement if available and images in the frame
+            //             if (_gnss_buf.empty() || f->getSensors().empty()) {
+            //                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
+            //                 std::stringstream().swap(msg);
+            //                 msg << "Created NF (mono) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
+            //                 std::cout << msg.str();
+            //             } else {
+            //                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
+            //                 _gnss_buf.pop();
+            //                 std::stringstream().swap(msg);
+            //                 msg << "Created NF (mono | GNSS) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
+            //                 std::cout << msg.str();
+            //             }
 
-                        sensors.clear();
-                    }
+            //             sensors.clear();
+            //         }
 
-                    image0 = getGrayImageFromMsg(_imgs_bufl.front());
-                    _imgs_bufl.pop();
-                    imgs.push_back(image0);
+            //         image0 = getGrayImageFromMsg(_imgs_bufl.front());
+            //         _imgs_bufl.pop();
+            //         imgs.push_back(image0);
 
-                    img_sensors = _prov->createImageSensors(imgs);
-                    sensors.push_back(img_sensors.at(0));
+            //         img_sensors = _prov->createImageSensors(imgs);
+            //         sensors.push_back(img_sensors.at(0));
 
-                    t_last = t_curr;
-                }
-            }
+            //         t_last = t_curr;
+            //     }
+            // }
 
             // IMU message
-            if (!_imu_buf.empty()) {
-                std::cout << "Found IMU in buffer!" << std::endl;
-                t_curr = _imu_buf.front().header.stamp.sec * 1e9 + _imu_buf.front().header.stamp.nanosec;
-                t_curr -= _prov->getIMUConfig()->dt_imu_cam * 1e9;
+            // if (!_imu_buf.empty()) {
+            //     std::cout << "Found IMU in buffer!" << std::endl;
+            //     t_curr = _imu_buf.front().header.stamp.sec * 1e9 + _imu_buf.front().header.stamp.nanosec;
+            //     t_curr -= _prov->getIMUConfig()->dt_imu_cam * 1e9;
 
-                // Check if this measurement can be added to the current frame
-                if (std::abs(t_curr*1e-9 - t_last*1e-9) > time_tolerance && !sensors.empty()) {
+            //     // Check if this measurement can be added to the current frame
+            //     if (std::abs(t_curr*1e-9 - t_last*1e-9) > time_tolerance && !sensors.empty()) {
 
-                    // Create a frame with the stored sensors
-                    std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
-                    f->init(sensors, t_last);
+            //         // Create a frame with the stored sensors
+            //         std::shared_ptr<isae::Frame> f = std::shared_ptr<isae::Frame>(new isae::Frame());
+            //         f->init(sensors, t_last);
 
-                    // Add a gnss measurement if available
-                    if (_gnss_buf.empty() || f->getSensors().empty()) {
-                        _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
-                        std::cout << "Created NF (imu) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
-                    } else {
-                        _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
-                        _gnss_buf.pop();
-                        std::cout << "Created NF (imu | GNSS) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
-                    }
+            //         // Add a gnss measurement if available
+            //         if (_gnss_buf.empty() || f->getSensors().empty()) {
+            //             _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
+            //             std::cout << "Created NF (imu) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
+            //         } else {
+            //             _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, _gnss_buf.front()));
+            //             _gnss_buf.pop();
+            //             std::cout << "Created NF (imu | GNSS) " << " (" << _pipe->_nf_queue.size() << "in queue)"  << std::endl;
+            //         }
 
-                    sensors.clear();
-                }
+            //         sensors.clear();
+            //     }
 
-                Eigen::Vector3d acc, gyr;
-                _imu_mutex.lock();
-                getImuInfoFromMsg(_imu_buf.front(), acc, gyr);
-                _imu_buf.pop();
-                _imu_mutex.unlock();
-                std::shared_ptr<isae::IMU> imu_ptr = _prov->createImuSensor(acc, gyr);
-                sensors.push_back(imu_ptr);
+            //     Eigen::Vector3d acc, gyr;
+            //     _imu_mutex.lock();
+            //     getImuInfoFromMsg(_imu_buf.front(), acc, gyr);
+            //     _imu_buf.pop();
+            //     _imu_mutex.unlock();
+            //     std::shared_ptr<isae::IMU> imu_ptr = _prov->createImuSensor(acc, gyr);
+            //     sensors.push_back(imu_ptr);
 
-                t_last = t_curr;
-            }
+            //     t_last = t_curr;
+            // }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
@@ -302,15 +262,12 @@ class SensorSubscriber : public rclcpp::Node {
 
     std::shared_ptr<isae::ADataProvider> _prov;
     std::shared_ptr<Pipeline> _pipe;
-    std::string _cam_l_topic, _cam_r_topic, _imu_topic, _gnss_topic;
 
-    std::queue<sensor_msgs::msg::Image> _imgs_bufl, _imgs_bufr;
+    std::shared_ptr<CameraSubscriber> _cam_sub;
+    std::shared_ptr<GnssSubscriber> _gnss_sub;
+
     std::queue<sensor_msgs::msg::Imu> _imu_buf;
-    std::queue<std::shared_ptr<GNSSMeas>> _gnss_buf;
-    std::mutex _img_mutex, _imu_mutex;
+    std::mutex _img_mutex;
 
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr _subscription_left;
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr _subscription_right;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr _subscription_imu;
-    rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr _subscription_gnss;
 };

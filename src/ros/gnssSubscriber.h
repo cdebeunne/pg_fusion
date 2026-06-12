@@ -1,3 +1,6 @@
+#ifndef GNSSSUBSCRIBER_H
+#define GNSSSUBSCRIBER_H
+
 #include "isaeslam/data/frame.h"
 #include "isaeslam/dataproviders/adataprovider.h"
 
@@ -18,6 +21,7 @@ class GnssSubscriber : public rclcpp::Node {
     }
 
     void subUbx(const sensor_msgs::msg::NavSatFix &gnss_msg) {
+        std::lock_guard<std::mutex> lock(_gnss_mutex);    
         // Extract ts from msg
         rclcpp::Time ts            = gnss_msg.header.stamp;
         unsigned long long ts_long = (unsigned long long)ts.nanoseconds();
@@ -36,14 +40,46 @@ class GnssSubscriber : public rclcpp::Node {
         gnss_meas->service = gnss_msg.status.service;
         gnss_meas->ts_long = ts_long;
 
-        // push the message in the buffer
+        // push the message in the buffer        
+        if (_gnss_buf.size() > __max_buf_len) {
+            _gnss_buf.pop();
+            msg << "[GNSS SUB] Warning: GNSS buffer full! Discarded measurement." << std::endl;
+        }
         _gnss_buf.push(gnss_meas);
+
         msg << "[GS] GNSS Buffer contains " << _gnss_buf.size() << " elements." << std::endl;
         std::cout << msg.str();
     }
 
+    void pop() {
+        std::lock_guard<std::mutex> lock(_gnss_mutex);        
+        _gnss_buf.pop();
+    }
+
+    bool empty() {        
+        std::lock_guard<std::mutex> lock(_gnss_mutex);
+        return _gnss_buf.empty();
+    }
+    
+    std::size_t size() {
+        std::lock_guard<std::mutex> lock(_gnss_mutex);        
+        return _gnss_buf.size();
+    } 
+
+    unsigned long long getTimeStamp() {
+        std::lock_guard<std::mutex> lock(_gnss_mutex);
+        return _gnss_buf.front()->ts_long;
+    }
+
+    std::shared_ptr<GNSSMeas> getMeas() {
+        std::lock_guard<std::mutex> lock(_gnss_mutex);
+        std::shared_ptr<GNSSMeas> meas = _gnss_buf.front();
+        _gnss_buf.pop();
+        return meas;
+    }
+
     void sync_process() {
-        std::cout << "\n[GS] Starting the GNSS reader thread!\n";
+        std::cout << "\n[PG] Starting the GNSS reader thread!\n";
 
         std::vector<std::shared_ptr<isae::ASensor>> sensors;        
         rcl_time_point_value_t t_last         = 0;
@@ -52,7 +88,7 @@ class GnssSubscriber : public rclcpp::Node {
         while (true) {
             if (!_gnss_buf.empty()) {
                 std::cout << "[GS] " << "Found GNSS " << " (" << _gnss_buf.size() << " in queue)"  << std::endl;
-                _gnss_buf.pop();
+                // _gnss_buf.pop();
                 
                 t_curr = this->now().nanoseconds();
                 std::cout << "[GS] Current time: " <<  t_curr << std::endl;
@@ -65,9 +101,16 @@ class GnssSubscriber : public rclcpp::Node {
         std::cout << "\n[GS] GNSS reader SyncProcess thread is terminating!\n";
     }
 
+  protected:
     std::string _gnss_topic;
 
     std::queue<std::shared_ptr<GNSSMeas>> _gnss_buf;
 
     rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr _subscription_gnss;
+
+    std::mutex _gnss_mutex;
+    
+    const uint __max_buf_len = 100;
 };
+
+#endif
