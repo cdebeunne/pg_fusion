@@ -68,7 +68,6 @@ void Pipeline::init()
     {
         _nf = next();
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
-        std::cout << "[PG-init] Added first frame to SLAM" << std::endl;
     }
 
     // Wait for a frame with GPS
@@ -90,17 +89,6 @@ void Pipeline::init()
         }
 
         std::cout << "[PG-init] Found Stereo NF" << std::endl;
-
-        std::stringstream msg;
-        msg << "[PG-pipeline] NavFrame: " << std::endl;
-        msg << "[PG-pipeline] N Sensors: " << _nf->_frame->getSensors().size() << std::endl;
-        if (_nf->_frame->getSensors().size() > 0)
-            msg << "[PG-pipeline] Image 0 is empty? " << _nf->_frame->getSensors().at(0)->getRawData().empty() << std::endl;
-        if (_nf->_frame->getSensors().size() > 1)
-            msg << "[PG-pipeline] Image 1 is empty? " << _nf->_frame->getSensors().at(1)->getRawData().empty() << std::endl;
-        msg << "[PG-pipeline] Timestamp: " << _nf->_frame->getTimestamp() << std::endl;
-        msg << "[PG-pipeline] Is KF?" << _nf->_frame->isKeyFrame() << std::endl;
-        std::cout << msg.str();
         
         // send the first frame to the SLAM
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
@@ -181,7 +169,7 @@ void Pipeline::step()
     _nf = next();
     _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
 
-    std::cout << _nf->_timestamp << std::endl;
+    // std::cout << _nf->_timestamp << std::endl;
     // Wait for a frame with GPS
     std::shared_ptr<isae::Frame> frame_ready;
     while (_nf->_gnss_meas == nullptr)
@@ -218,17 +206,6 @@ void Pipeline::step()
         }
 
         // Send frame to the SLAM
-        std::stringstream msg;
-        msg << "[PG-pipeline] NavFrame: " << std::endl;
-        msg << "[PG-pipeline] N Sensors: " << _nf->_frame->getSensors().size() << std::endl;
-        if (_nf->_frame->getSensors().size() > 0)
-            msg << "[PG-pipeline] Image 0 is empty? " << _nf->_frame->getSensors().at(0)->getRawData().empty() << std::endl;
-        if (_nf->_frame->getSensors().size() > 1)
-            msg << "[PG-pipeline] Image 1 is empty? " << _nf->_frame->getSensors().at(1)->getRawData().empty() << std::endl;
-        msg << "[PG-pipeline] Timestamp: " << _nf->_frame->getTimestamp() << std::endl;
-        msg << "[PG-pipeline] Is KF?" << _nf->_frame->isKeyFrame() << std::endl;
-        std::cout << msg.str();
-
         // (with or without GNSS, any data is good)
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
 
@@ -256,7 +233,6 @@ void Pipeline::step()
         }
 
         _nf->_T_w_f = frame_ready->getFrame2WorldTransform();
-        std::cout << "[PG-pipeline] SLAM Frame is ready!" << std::endl;
 
         // Compute the current pose
         Eigen::Affine3d T_n_flast = _nav_frames.back()->_T_n_f;
