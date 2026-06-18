@@ -64,8 +64,8 @@ int main(int argc, char **argv) {
         std::make_shared<CameraSubscriber>(slam_param->getDataProvider());
 
     // Start the sensor subscriber
-    std::shared_ptr<SensorSubscriber> sensor_subscriber =
-        std::make_shared<SensorSubscriber>(slam_param->getDataProvider(), pipe, cam_subscriber, gnss_subscriber);
+    std::shared_ptr<SensorSynchronizer> sensor_subscriber =
+        std::make_shared<SensorSynchronizer>(slam_param->getDataProvider(), pipe, cam_subscriber, gnss_subscriber);
 
     // Launch SLAM thread
     std::thread odom_thread(&isae::SLAMCore::runFullOdom, SLAM);
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     // Start a thread for providing new measurements to the SLAM
     // std::thread cam_thread(&CameraSubscriber::sync_process, cam_subscriber);
     // std::thread gnss_thread(&GnssSubscriber::sync_process, gnss_subscriber);
-    std::thread sync_thread(&SensorSubscriber::sync_process, sensor_subscriber);
+    std::thread sync_thread(&SensorSynchronizer::sync_process, sensor_subscriber);
     sync_thread.detach();
 
     rclcpp::executors::MultiThreadedExecutor mt_executor;
