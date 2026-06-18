@@ -14,16 +14,16 @@
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
 #include <cv_bridge/cv_bridge.hpp>
 
-class SensorSubscriber : public rclcpp::Node {
+class SensorSynchronizer : public rclcpp::Node {
 
   public:
-    SensorSubscriber(std::shared_ptr<isae::ADataProvider> prov, std::shared_ptr<Pipeline> pipe, 
+    SensorSynchronizer(std::shared_ptr<isae::ADataProvider> prov, std::shared_ptr<Pipeline> pipe, 
     std::shared_ptr<CameraSubscriber> cam_sub, std::shared_ptr<GnssSubscriber> gnss_sub)
         : Node("sensor_subscriber"), _prov(prov), _pipe(pipe), _cam_sub(cam_sub), _gnss_sub(gnss_sub) {
         // if (_prov->getIMUConfig()) {
         //     _imu_topic        = _prov->getIMUConfig()->ros_topic;
         //     _subscription_imu = this->create_subscription<sensor_msgs::msg::Imu>(
-        //         _imu_topic, 10, std::bind(&SensorSubscriber::subIMU, this, std::placeholders::_1));
+        //         _imu_topic, 10, std::bind(&SensorSynchronizer::subIMU, this, std::placeholders::_1));
         // }
     }
 
