@@ -112,7 +112,7 @@ class SensorSynchronizer : public rclcpp::Node {
                                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
 
                                 std::stringstream().swap(msg);
-                                msg << "[PGSS] Created NF (stereo) " << " (" << _pipe->_nf_queue.size() << "in queue)" << std::endl;
+                                msg << "[PGSS] Created NF (stereo) " << "( " << _pipe->_nf_queue.size() << "in queue)" << std::endl;
                                 std::cout << msg.str();
                             } else {
                                 
@@ -136,7 +136,7 @@ class SensorSynchronizer : public rclcpp::Node {
                                 {
                                     std::shared_ptr<GNSSMeas> gnss_meas = _gnss_sub->getMeas();
                                     if (gnss_meas)
-                                        _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, gnss_meas));
+                                        _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, std::make_shared<GnssSensor>(gnss_meas, _pipe->_param->_gnss.thresh_cov)));
                                     else
                                         std::cerr << "[PGSS] GNSS queue is not empty, but no measurement was obtained!" << std::endl;
 
@@ -150,6 +150,7 @@ class SensorSynchronizer : public rclcpp::Node {
 
                             sensors.clear();
                         } else {
+                            msg << "[PGSS] Sensors empty!" << std::endl;
                             if (std::abs(t_curr*1e-9 - t_last*1e-9) <= time_tolerance) {
                                 std::stringstream().swap(msg);
                                 msg << "[PGSS] Time tolerance violated: " << std::abs(t_curr*1e-9 - t_last*1e-9) << " <= " << time_tolerance << std::endl;

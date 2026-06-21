@@ -187,6 +187,10 @@ class RosVisualizer : public rclcpp::Node {
         _pub_traj_vo->publish(_traj_vo_msg);
     }
 
+    void publishGNSS(std::shared_ptr<Pipeline> &pipe) {
+        
+    }
+
     void runVisualizer(std::shared_ptr<Pipeline> pipe) {
 
         while (true) {

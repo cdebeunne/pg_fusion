@@ -24,7 +24,7 @@ class CameraSubscriber : public rclcpp::Node {
     CameraSubscriber(std::shared_ptr<isae::ADataProvider> prov)
         : Node("camera_subscriber"), _prov(prov) {
 
-        for (int ncam = 0; ncam < _prov->getNCam(); ncam++ ) {
+        for (uint ncam = 0; ncam < _prov->getNCam(); ncam++ ) {
             std::string cam_topic = _prov->getCamConfigs().at(ncam)->ros_topic;
             _imgs_topics.push_back(cam_topic);
 
@@ -43,7 +43,7 @@ class CameraSubscriber : public rclcpp::Node {
                     cam_topic, 10, std::bind(&CameraSubscriber::subSecondImage, this, std::placeholders::_1));
             }
             _subscriptions.push_back(subscription);
-            std::cout << "[PG] Added camera subscription (" << ncam << ")" << std::endl;
+            std::cout << "[PG] Added camera subscription (" << ncam << ") " << cam_topic << std::endl;
         }
     }
 

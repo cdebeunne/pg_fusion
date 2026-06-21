@@ -74,12 +74,15 @@ set(SOURCE
    ${SOURCE}
    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/poseGraph.cpp
    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/pipeline.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/src/core/PGParameters.cpp
 )
 set(HEADERS
    ${HEADERS}
+   ${CMAKE_CURRENT_SOURCE_DIR}/include/PGParameters.hpp
    ${CMAKE_CURRENT_SOURCE_DIR}/include/poseGraph.hpp
    ${CMAKE_CURRENT_SOURCE_DIR}/include/pipeline.hpp
    ${CMAKE_CURRENT_SOURCE_DIR}/include/data/navframe.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/include/sensors/GnssSensor.hpp
 )
 add_library(${PROJECT_NAME} SHARED ${SOURCE} ${HEADERS})
 message(STATUS ${ISAE_SLAM_LIBRARIES})

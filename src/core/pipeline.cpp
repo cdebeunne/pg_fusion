@@ -68,31 +68,35 @@ void Pipeline::init()
     {
         _nf = next();
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
+        std::cout << "[PG-init] Sent Image to SLAM init..." << std::endl;
     }
 
     // Wait for a frame with GPS
-    while (_nf->_gnss_meas == nullptr)
+    _nf = next();
+    while (_nf->_gnss == nullptr || _nf->_gnss->_meas == nullptr)
     {
-        _nf = next();
-
-        // Set KF if GNSS meas
-        if (_nf->_gnss_meas != nullptr)
-        {
-            std::cout << "[PG-init] Found GNSS NF" << std::endl;
-
-            __t_offset_gnss_img = _nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9;
-            std::cout << "############################################################" << std::endl;                                    
-            std::cout << "[PG-init] GNSS/Camera offset [s]: " << __t_offset_gnss_img << std::endl;
-            std::cout << "############################################################" << std::endl; 
-            _nf->_frame->setKeyFrame();
-            std::cout << "[PG-init] SLAM last Keyframe ID: " << _slam->getLastKF()->_id << std::endl;
-        }
-
         std::cout << "[PG-init] Found Stereo NF" << std::endl;
         
-        // send the first frame to the SLAM
+        // send the image-only frame to the SLAM
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
+        _nf = next();
     }
+    // Set KF if GNSS meas
+    std::cout << "[PG-init] Found GNSS NF" << std::endl;
+
+    __t_offset_gnss_img = _nf->_gnss->_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9;
+    
+    std::cout << "############################################################" << std::endl;                                    
+    std::cout << "[PG-init] GNSS/Camera offset [s]: " << __t_offset_gnss_img << std::endl;
+    std::cout << "############################################################" << std::endl; 
+
+    _nf->_frame->setKeyFrame();
+
+    std::cout << "[PG-init] SLAM last Keyframe ID: " << _slam->getLastKF()->_id << std::endl;
+
+    // send the first GNSS frame to the SLAM
+    _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
+
     std::cout << "[PG-init] Continue after GNSS acquired ..." << std::endl;
     std::cout << "[PG-init] PG frame ID: " << _nf->_frame->_id << std::endl;
 
@@ -127,9 +131,9 @@ void Pipeline::init()
     // Set the current frame as the reference frame if first init
     if (_llh_ref.isZero())
     {
-        setRef(_nf->_gnss_meas->llh_meas);
+        setRef(_nf->_gnss->_meas->llh_meas);
         Eigen::Affine3d T_n_a = Eigen::Affine3d::Identity();
-        _nf->_T_n_f = T_n_a * _T_a_f;
+        _nf->_T_n_f = T_n_a * _param->_gnss.T_a_f;
     }
     std::cout << "[PG-init] Set the reference frame!" << std::endl;
 
@@ -172,7 +176,7 @@ void Pipeline::step()
     // std::cout << _nf->_timestamp << std::endl;
     // Wait for a frame with GPS
     std::shared_ptr<isae::Frame> frame_ready;
-    while (_nf->_gnss_meas == nullptr)
+    while (_nf->_gnss == nullptr || _nf->_gnss->_meas == nullptr)
     {
         _nf = next();
 
@@ -183,20 +187,20 @@ void Pipeline::step()
         }
 
         // Set KF if GNSS meas
-        if (_nf->_gnss_meas != nullptr) 
+        if (_nf->_gnss != nullptr && _nf->_gnss->_meas != nullptr) 
         {
             // check synchronous measurements
             double time_tol_gnss_s = 0.1; // TODO make configurable
-            if (std::abs(_nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9 - __t_offset_gnss_img) > time_tol_gnss_s)
+            if (std::abs(_nf->_gnss->_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9 - __t_offset_gnss_img) > time_tol_gnss_s)
             {
                 std::cout << "############################################################" << std::endl;                                    
                 std::cout << "[PG-pipeline] Throw IMG/GNSS Sync error: " 
-                        << "(" << (_nf->_gnss_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9) << ") " 
+                        << "(" << (_nf->_gnss->_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9) << ") " 
                         << "[" << __t_offset_gnss_img << "] " 
-                        << _nf->_gnss_meas->ts_long << " | " << _nf->_frame->getTimestamp() << std::endl;
+                        << _nf->_gnss->_meas->ts_long << " | " << _nf->_frame->getTimestamp() << std::endl;
                 std::cout << "############################################################" << std::endl;       
                 
-                _nf->_gnss_meas = nullptr;
+                _nf->_gnss->_meas = nullptr;
             }
             else
             {
@@ -242,13 +246,13 @@ void Pipeline::step()
     }
 
     // Compute position in the local frame
-    Eigen::Vector3d t_n_a = ecefToENU(llhToEcef(_nf->_gnss_meas->llh_meas));
+    Eigen::Vector3d t_n_a = ecefToENU(llhToEcef(_nf->_gnss->_meas->llh_meas));
     Eigen::Affine3d T_n_f = Eigen::Affine3d::Identity();
-    T_n_f.translation() = t_n_a + _T_a_f.translation();
+    T_n_f.translation() = t_n_a + _param->_gnss.T_a_f.translation();
     T_n_f.affine().block(0, 0, 3, 3) = _T_n_w.rotation() * _nf->_T_w_f.rotation();
 
     // Threshold on the covariance of the GNSS estimate
-    if (_nf->_gnss_meas->cov.norm() < _thresh_cov)
+    if (_nf->_gnss->isUsable())
     {
 
         // Use the pose of the GNSS when not initialized or VSLAM is not initialized
@@ -260,14 +264,14 @@ void Pipeline::step()
         // add absolute position contraint
         AbsolutePositionFactor af;
         af.t = T_n_f.translation();
-        if (_remove_z_estimate)
+        if (_param->_gnss.remove_z_estimate)
             af.t.z() = 0; //_nf->_T_w_f.translation().z(); // Set the altitude with the slam as the estimate tend to drift
         af.nf = _nf;
         af.inf = Eigen::Matrix3d::Identity();
-        if (_nf->_gnss_meas->cov.norm() > 1e-4)
+        if (_nf->_gnss->_meas->cov.norm() > 1e-4)
         {
-            af.inf << std::sqrt(1 / _nf->_gnss_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss_meas->cov(1)), 0, 0, 0,
-                std::sqrt(1 / _nf->_gnss_meas->cov(2));
+            af.inf << std::sqrt(1 / _nf->_gnss->_meas->cov(0)), 0, 0, 0, std::sqrt(1 / _nf->_gnss->_meas->cov(1)), 0, 0, 0,
+                std::sqrt(1 / _nf->_gnss->_meas->cov(2));
             // af.inf *= 0.1;
         }
         else
@@ -288,7 +292,7 @@ void Pipeline::step()
     }
     else
     {
-        std::cout << "[PG-pipeline] GPS not used. Cov.: " << _nf->_gnss_meas->cov.norm() << std::endl;
+        std::cout << "[PG-pipeline] GPS not used. Cov.: " << _nf->_gnss->_meas->cov.norm() << std::endl;
     }
 
     // add relative pose constraints if the VIO is initialized
@@ -351,7 +355,7 @@ void Pipeline::step()
     _nav_frames.push_back(_nf);
 
     // Sliding window
-    if (_pg->_nf_absfact_map.size() > _window_size)
+    if (_pg->_nf_absfact_map.size() > _param->_pipe.window_size)
     {
         // Marginalize
         std::cout << "[PG-pipeline] Marginalizing PG ..." << std::endl;

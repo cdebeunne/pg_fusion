@@ -2,6 +2,7 @@
 #define PIPELINE_H
 
 #include "data/navframe.hpp"
+#include "PGParameters.hpp"
 #include "poseGraph.hpp"
 #include <Eigen/Dense>
 #include <ceres/ceres.h>
@@ -18,12 +19,8 @@ double deg2rad = M_PI / 180;
 class Pipeline {
   public:
     Pipeline(std::shared_ptr<isae::SLAMCore> slam,
-             Eigen::Affine3d &T_a_f,
-             double thresh_cov,
-             uint window_size,
-             bool remove_z_estimate)
-        : _slam(slam), _T_a_f(T_a_f), _thresh_cov(thresh_cov), _window_size(window_size),
-          _remove_z_estimate(remove_z_estimate) {
+            std::shared_ptr<PGParameters> param)
+        : _slam(slam), _param(param) {
 
         // Ellipsoid parameters of the WGS84 convention
         _a  = 6378137.0f;                           //< semi-major axis (cf. Earth radius) [m]
@@ -82,6 +79,7 @@ class Pipeline {
     std::deque<std::shared_ptr<NavFrame>> _nav_frames;
     std::vector<std::pair<unsigned long long, Eigen::Affine3d>> _removed_frame_poses, _removed_vo_poses;
     std::shared_ptr<NavFrame> _nf;
+    std::shared_ptr<PGParameters> _param;
 
   protected:  
     std::filesystem::path profiling_path;
