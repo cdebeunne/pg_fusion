@@ -61,22 +61,17 @@ class SensorSynchronizer : public rclcpp::Node {
         rcl_time_point_value_t t_gnss_curr = 0;
         double time_tol_gnss_s = 60;
 
-        while (true) {
-            // GNSS message
-            // GNSSMeas gnss_fix;
+        std::stringstream msg;
 
+        std::shared_ptr<NavFrame> nf;
+
+        while (true) {
             // Case Stereo
             if (_prov->getNCam() == 2) {
                 if (!_cam_sub->emptyAny()) {
-
-                    std::stringstream msg;
                     reportStereoImageDetection(msg);
 
-                    if (!checkStereoImgSync(t_curr, msg)) {
-
-                    }
-                    else {
-
+                    if (checkStereoImgSync(t_curr, msg)) {
                         // Check if this measurement can be added to the current frame
                         if (std::abs(t_curr*1e-9 - t_last*1e-9)  > time_tolerance && !sensors.empty()) {
 
@@ -88,8 +83,7 @@ class SensorSynchronizer : public rclcpp::Node {
 
                             // Add a gnss measurement if available and images in the frame
                             if (_gnss_sub->empty() || f->getSensors().empty()) {
-                                _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
-
+                                nf = std::make_shared<NavFrame>(f);
                                 reportNavFrameCreationStereo(msg);
                             } else {
                                 
@@ -109,7 +103,7 @@ class SensorSynchronizer : public rclcpp::Node {
                                 {
                                     std::shared_ptr<GNSSMeas> gnss_meas = _gnss_sub->getMeas();
                                     if (gnss_meas)
-                                        _pipe->_nf_queue.push(std::make_shared<NavFrame>(f, std::make_shared<GnssSensor>(gnss_meas, _pipe->_param->_gnss.thresh_cov)));
+                                        nf = std::make_shared<NavFrame>(f, std::make_shared<GnssSensor>(gnss_meas, _pipe->_param->_gnss.thresh_cov));
                                     else
                                         std::cerr << "[PGSS] GNSS queue is not empty, but no measurement was obtained!" << std::endl;
 
@@ -124,7 +118,8 @@ class SensorSynchronizer : public rclcpp::Node {
                             checkReportTimeTolError(t_curr, t_last, time_tolerance, msg);
                             checkReportEmptySensorError(sensors, msg);
                         }
-                    addStereoImageToSensors(sensors);
+                        addStereoImageToSensors(sensors);
+                        _pipe->_nf_queue.push(nf);
                     }
                     t_last = t_curr;
                 }
@@ -220,6 +215,10 @@ class SensorSynchronizer : public rclcpp::Node {
         std::cout << "\n Bag reader SyncProcess thread is terminating!\n";
     }
 
+/**
+ * Discard images from the queue if the most recent image in one queue
+ * is too old w.r.t. the other queue (i.e. we lost an image somewhere)
+ */
 bool checkStereoImgSync(unsigned long long &t_curr, std::stringstream &msg)
 {
     unsigned long long dt_tol_nanos = 25000000;
