@@ -70,28 +70,12 @@ class SensorSynchronizer : public rclcpp::Node {
                 if (!_cam_sub->emptyAny()) {
 
                     std::stringstream msg;
-                    msg << "[PGSS] Found STEREO image in buffer! " 
-                        << "(" << _cam_sub->size(0) << "|" << _cam_sub->size(1) << ")" << std::endl;
-                    std::cout << msg.str();
+                    reportStereoImageDetection(msg);
 
-                    // other threads can add to, but 
-                    std::vector<rclcpp::Time> t = _cam_sub->getTimeStamps();
-                    unsigned long long time0 = t.at(0).nanoseconds();
-                    unsigned long long time1 = t.at(1).nanoseconds();
-                    t_curr       = time0;
+                    if (!checkStereoImgSync(t_curr, msg)) {
 
-                    std::stringstream().swap(msg);
-                    msg << "[PGSS] Frame timestamp: " << t_curr << std::endl;
-                    std::cout << msg.str();
-
-                    // sync tolerance
-                    if (time0 < time1 - 25000000) {
-                        _cam_sub->pop(0);
-                        std::cout << "\n Throw img0 -- Sync error : " << (time0 - time1) << "\n";
-                    } else if (time0 > time1 + 25000000) {
-                        _cam_sub->pop(1);
-                        std::cout << "\n Throw img1 -- Sync error : " << (time0 - time1) << "\n";
-                    } else {
+                    }
+                    else {
 
                         // Check if this measurement can be added to the current frame
                         if (std::abs(t_curr*1e-9 - t_last*1e-9)  > time_tolerance && !sensors.empty()) {
@@ -106,9 +90,7 @@ class SensorSynchronizer : public rclcpp::Node {
                             if (_gnss_sub->empty() || f->getSensors().empty()) {
                                 _pipe->_nf_queue.push(std::make_shared<NavFrame>(f));
 
-                                std::stringstream().swap(msg);
-                                msg << "[PGSS] Created NF (stereo) " << "( " << _pipe->_nf_queue.size() << "in queue)" << std::endl;
-                                std::cout << msg.str();
+                                reportNavFrameCreationStereo(msg);
                             } else {
                                 
                                 // check if the step between two GNSS measurement timestamps 
@@ -121,11 +103,7 @@ class SensorSynchronizer : public rclcpp::Node {
                                      dt > time_tol_gnss_s)
                                 {
                                     _gnss_sub->pop();
-                                    std::stringstream().swap(msg);
-                                    msg << "############################################################" << std::endl;
-                                    msg << "[PGSS] Discarded NF (stereo | GNSS) " << " (" << dt << " s)"  << std::endl;
-                                    msg << "############################################################" << std::endl;
-                                    std::cout << msg.str();
+                                    reportNavFrameDiscarded(msg, dt);
                                 } 
                                 else
                                 {
@@ -135,9 +113,7 @@ class SensorSynchronizer : public rclcpp::Node {
                                     else
                                         std::cerr << "[PGSS] GNSS queue is not empty, but no measurement was obtained!" << std::endl;
 
-                                    std::stringstream().swap(msg);
-                                    msg << "[PGSS] Created NF (stereo | GNSS) " << " (" << _pipe->_nf_queue.size() << " in queue)"  << std::endl;
-                                    std::cout << msg.str();
+                                    reportNavFrameCreationGNSS(msg);
                                 }
                                 ts_gnss_last = ts_gnss_curr;
                                 t_gnss_last = t_gnss_curr;
@@ -145,23 +121,11 @@ class SensorSynchronizer : public rclcpp::Node {
 
                             sensors.clear();
                         } else {
-                            msg << "[PGSS] Sensors empty!" << std::endl;
-                            if (std::abs(t_curr*1e-9 - t_last*1e-9) <= time_tolerance) {
-                                std::stringstream().swap(msg);
-                                msg << "[PGSS] Time tolerance violated: " << std::abs(t_curr*1e-9 - t_last*1e-9) << " <= " << time_tolerance << std::endl;
-                                std::cout << msg.str();
-                            }
-                            if (sensors.empty()) {
-                                std::stringstream().swap(msg);
-                                msg << "[PGSS] Sensors empty!" << std::endl;
-                                std::cout << msg.str();
-                            }
+                            checkReportTimeTolError(t_curr, t_last, time_tolerance, msg);
+                            checkReportEmptySensorError(sensors, msg);
                         }
-
-
                     addStereoImageToSensors(sensors);
                     }
-
                     t_last = t_curr;
                 }
 
@@ -256,26 +220,115 @@ class SensorSynchronizer : public rclcpp::Node {
         std::cout << "\n Bag reader SyncProcess thread is terminating!\n";
     }
 
+bool checkStereoImgSync(unsigned long long &t_curr, std::stringstream &msg)
+{
+    unsigned long long dt_tol_nanos = 25000000;
+    bool sync_ok = true;
+    std::vector<rclcpp::Time> t = _cam_sub->getTimeStamps();
+    unsigned long long time0 = t.at(0).nanoseconds();
+    unsigned long long time1 = t.at(1).nanoseconds();
+    t_curr       = time0;
+
+    reportTimestamp(msg, t_curr);
+
+    // sync tolerance
+    if (time0 < time1 - dt_tol_nanos) {
+        _cam_sub->pop(0);
+        reportStereoImgSyncError(0, time0, time1, msg);
+        sync_ok = false;
+    } else if (time0 > time1 + dt_tol_nanos) {
+        _cam_sub->pop(1);
+        reportStereoImgSyncError(1, time0, time1, msg);
+        sync_ok = false;
+    } 
+    return sync_ok;
+}
+
+
+
+void reportNavFrameDiscarded(std::stringstream &msg, double dt)
+{
+                                    std::stringstream().swap(msg);
+                                    msg << "############################################################" << std::endl;
+                                    msg << "[PGSS] Discarded NF (stereo | GNSS) " << " (" << dt << " s)"  << std::endl;
+                                    msg << "############################################################" << std::endl;
+                                    std::cout << msg.str();
+}
+
+void reportStereoImgSyncError(uint cam, unsigned long long time0, unsigned long long time1, std::stringstream &msg)
+{
+    std::stringstream().swap(msg);
+    msg << "\n Throw img" << cam << " -- Sync error : " << (time0 - time1) << "\n";
+    std::cout << msg.str();
+}
+
+void reportTimestamp(std::stringstream &msg, unsigned long long t_curr)
+{
+    std::stringstream().swap(msg);
+    msg << "[PGSS] Frame timestamp: " << t_curr << std::endl;
+    std::cout << msg.str();
+}
+
+void reportStereoImageDetection(std::stringstream &msg)
+{
+    std::stringstream().swap(msg);
+    msg << "[PGSS] Found STEREO image in buffer! " 
+        << "(" << _cam_sub->size(0) << "|" << _cam_sub->size(1) << ")" << std::endl;
+    std::cout << msg.str();
+}
+
+void reportNavFrameCreationStereo(std::stringstream &msg)
+{
+    std::stringstream().swap(msg);
+    msg << "[PGSS] Created NF (stereo) " << "( " << _pipe->_nf_queue.size() << "in queue)" << std::endl;
+    std::cout << msg.str();
+}
+
+void reportNavFrameCreationGNSS(std::stringstream &msg)
+{
+    std::stringstream().swap(msg);
+    msg << "[PGSS] Created NF (stereo | GNSS) " << " (" << _pipe->_nf_queue.size() << " in queue)"  << std::endl;
+    std::cout << msg.str();
+}
+
+void checkReportEmptySensorError(std::vector<std::shared_ptr<isae::ASensor>> &sensors, std::stringstream &msg)
+{
+    if (sensors.empty()) {
+        std::stringstream().swap(msg);
+        msg << "[PGSS] Sensors empty!" << std::endl;
+        std::cout << msg.str();
+    }
+}
+
+void checkReportTimeTolError(unsigned long long t_curr, unsigned long long t_last, double time_tolerance, std::stringstream &msg)
+{
+    if (std::abs(t_curr*1e-9 - t_last*1e-9) <= time_tolerance) {
+        std::stringstream().swap(msg);
+        msg << "[PGSS] Time tolerance violated: " << std::abs(t_curr*1e-9 - t_last*1e-9) << " <= " << time_tolerance << std::endl;
+        std::cout << msg.str();
+    }
+}
+
 void addStereoImageToSensors(std::vector<std::shared_ptr<isae::ASensor>> &sensors)
 {
-        cv::Mat image0, image1;
-        std::vector<cv::Mat> imgs;
-        image0 = _cam_sub->getGrayImageMono(0);
-        if (!image0.empty())
-            imgs.push_back(image0);
+    cv::Mat image0, image1;
+    std::vector<cv::Mat> imgs;
+    image0 = _cam_sub->getGrayImageMono(0);
+    if (!image0.empty())
+        imgs.push_back(image0);
 
-        image1 = _cam_sub->getGrayImageMono(1);
-        if (!image1.empty())
-            imgs.push_back(image1);
+    image1 = _cam_sub->getGrayImageMono(1);
+    if (!image1.empty())
+        imgs.push_back(image1);
 
-        std::vector<std::shared_ptr<isae::ImageSensor>> img_sensors;
-        if (!imgs.empty())
-            img_sensors = _prov->createImageSensors(imgs);
+    std::vector<std::shared_ptr<isae::ImageSensor>> img_sensors;
+    if (!imgs.empty())
+        img_sensors = _prov->createImageSensors(imgs);
 
-        if (!img_sensors.empty()) {
-            sensors.push_back(img_sensors.at(0));
-            sensors.push_back(img_sensors.at(1));
-        }
+    if (!img_sensors.empty()) {
+        sensors.push_back(img_sensors.at(0));
+        sensors.push_back(img_sensors.at(1));
+    }
 }
 
     std::shared_ptr<isae::ADataProvider> _prov;
