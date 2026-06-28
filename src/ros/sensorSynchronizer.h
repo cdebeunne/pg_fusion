@@ -65,11 +65,6 @@ class SensorSynchronizer : public rclcpp::Node {
             // GNSS message
             // GNSSMeas gnss_fix;
 
-            // Image messages
-            cv::Mat image0, image1;
-            std::vector<cv::Mat> imgs;
-            std::vector<std::shared_ptr<isae::ImageSensor>> img_sensors;
-
             // Case Stereo
             if (_prov->getNCam() == 2) {
                 if (!_cam_sub->emptyAny()) {
@@ -164,21 +159,7 @@ class SensorSynchronizer : public rclcpp::Node {
                         }
 
 
-                        image0 = _cam_sub->getGrayImageMono(0);
-                        if (!image0.empty())
-                            imgs.push_back(image0);
-
-                        image1 = _cam_sub->getGrayImageMono(1);
-                        if (!image1.empty())
-                            imgs.push_back(image1);
-
-                        if (!imgs.empty())
-                            img_sensors = _prov->createImageSensors(imgs);
-
-                        if (!img_sensors.empty()) {
-                            sensors.push_back(img_sensors.at(0));
-                            sensors.push_back(img_sensors.at(1));
-                        }
+                    addStereoImageToSensors(sensors);
                     }
 
                     t_last = t_curr;
@@ -274,6 +255,28 @@ class SensorSynchronizer : public rclcpp::Node {
 
         std::cout << "\n Bag reader SyncProcess thread is terminating!\n";
     }
+
+void addStereoImageToSensors(std::vector<std::shared_ptr<isae::ASensor>> &sensors)
+{
+        cv::Mat image0, image1;
+        std::vector<cv::Mat> imgs;
+        image0 = _cam_sub->getGrayImageMono(0);
+        if (!image0.empty())
+            imgs.push_back(image0);
+
+        image1 = _cam_sub->getGrayImageMono(1);
+        if (!image1.empty())
+            imgs.push_back(image1);
+
+        std::vector<std::shared_ptr<isae::ImageSensor>> img_sensors;
+        if (!imgs.empty())
+            img_sensors = _prov->createImageSensors(imgs);
+
+        if (!img_sensors.empty()) {
+            sensors.push_back(img_sensors.at(0));
+            sensors.push_back(img_sensors.at(1));
+        }
+}
 
     std::shared_ptr<isae::ADataProvider> _prov;
     std::shared_ptr<Pipeline> _pipe;
