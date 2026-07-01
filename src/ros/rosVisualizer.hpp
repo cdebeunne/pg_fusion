@@ -21,14 +21,17 @@
 class RosVisualizer : public rclcpp::Node {
 
   public:
-    RosVisualizer() : Node("pg_publisher") {
+    RosVisualizer(std::shared_ptr<Pipeline> pipe) : Node("pg_publisher") {
         std::cout << "\n[PG] Creation of ROS vizualizer" << std::endl;
+        _pipe = pipe;
 
-        _pub_traj       = this->create_publisher<visualization_msgs::msg::Marker>("pg/traj", 1000);
-        _pub_traj_vo    = this->create_publisher<visualization_msgs::msg::Marker>("pg/vo/traj", 1000);
-        _pub_pose       = this->create_publisher<geometry_msgs::msg::PoseStamped>("pg_pose", 1000);
-        _pub_ecef       = this->create_publisher<geometry_msgs::msg::PointStamped>("pg/ecef", 1000);
-        _pub_slam       = this->create_publisher<geometry_msgs::msg::PoseStamped>("pg/slam", 1000);
+        _pub_traj       = this->create_publisher<visualization_msgs::msg::Marker>("pg/enu/traj", 1000);
+        _pub_traj_vo    = this->create_publisher<visualization_msgs::msg::Marker>("pg/ecef/traj", 1000);
+        _pub_pose       = this->create_publisher<geometry_msgs::msg::PoseStamped>("pg/enu/pose", 1000);
+        _pub_slam       = this->create_publisher<geometry_msgs::msg::PoseStamped>("pg/ecef/pose", 1000);
+        _pub_ecef       = this->create_publisher<geometry_msgs::msg::PointStamped>("pg/ecef/position", 1000);
+        _pub_gnss       = this->create_publisher<geometry_msgs::msg::PointStamped>("pg/enu/gnss_fix", 1000);
+        _pub_gnss_marker = this->create_publisher<visualization_msgs::msg::Marker>("pg/enu/gnss_fix/marker", 1000);
         _tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
         _traj_msg.type    = visualization_msgs::msg::Marker::LINE_STRIP;
@@ -44,10 +47,10 @@ class RosVisualizer : public rclcpp::Node {
         _traj_vo_msg.color.b = 0.0;
     }
 
-    void publishPose(const Eigen::Affine3d T_n_f) {
-
+    void publishPoseinLocalNavigationFrame(std::shared_ptr<NavFrame> nf) {
+        const Eigen::Affine3d T_n_f = nf->_T_n_f;
         geometry_msgs::msg::PoseStamped Tnf_msg;
-        Tnf_msg.header.stamp    = rclcpp::Node::now();
+        Tnf_msg.header.stamp    = rclcpp::Time(nf->_timestamp);
         Tnf_msg.header.frame_id = "world";
 
         // Deal with position
@@ -69,7 +72,7 @@ class RosVisualizer : public rclcpp::Node {
 
         // Publish transform
         geometry_msgs::msg::TransformStamped Tnf_tf;
-        Tnf_tf.header.stamp            = rclcpp::Node::now();
+        Tnf_tf.header.stamp            = rclcpp::Time(nf->_timestamp);
         Tnf_tf.header.frame_id         = "world";
         Tnf_tf.child_frame_id          = "robot";
         Tnf_tf.transform.translation.x = tnf.x();
@@ -82,34 +85,15 @@ class RosVisualizer : public rclcpp::Node {
         _pub_pose->publish(Tnf_msg);
     }
 
-    void publishECEF(const Eigen::Vector3d ecef) {
-
-        geometry_msgs::msg::PointStamped ecef_msg;
-        ecef_msg.header.stamp    = rclcpp::Node::now();
-        ecef_msg.header.frame_id = "world";
-
-        // Deal with position
-        geometry_msgs::msg::Point p;
-        p.x                   = ecef(0);
-        p.y                   = ecef(1);
-        p.z                   = ecef(2);
-        ecef_msg.point        = p;
-
-        // publish messages
-        _pub_ecef->publish(ecef_msg);
-    }
-
-
-    void publishFrame(std::shared_ptr<Pipeline> &pipe) {
-        std::shared_ptr<NavFrame> frame = pipe->_nav_frames.back();
+    void publishPoseinWorldFrame(std::shared_ptr<NavFrame> nf) {
 
         geometry_msgs::msg::PoseStamped Twf_msg;
-        Twf_msg.header.stamp    = rclcpp::Time(frame->_timestamp);
+        Twf_msg.header.stamp    = rclcpp::Time(nf->_timestamp);
         Twf_msg.header.frame_id = "world";
 
         // Deal with position
         geometry_msgs::msg::Point p;
-        Eigen::Vector3d tnf   = frame->_T_n_w * frame->_T_w_f.translation();
+        Eigen::Vector3d tnf   = nf->_T_n_w * nf->_T_w_f.translation();
         p.x                   = tnf.x();
         p.y                   = tnf.y();
         p.z                   = tnf.z();
@@ -117,7 +101,7 @@ class RosVisualizer : public rclcpp::Node {
 
         // Deal with orientation
         geometry_msgs::msg::Quaternion q;
-        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)(frame->_T_n_w.linear() * frame->_T_w_f.linear());
+        Eigen::Quaterniond eigen_q = (Eigen::Quaterniond)(nf->_T_n_w.linear() * nf->_T_w_f.linear());
         q.x                        = eigen_q.x();
         q.y                        = eigen_q.y();
         q.z                        = eigen_q.z();
@@ -126,7 +110,7 @@ class RosVisualizer : public rclcpp::Node {
 
         // Publish transform
         geometry_msgs::msg::TransformStamped Tnf_tf;
-        Tnf_tf.header.stamp            = rclcpp::Time(frame->_timestamp);
+        Tnf_tf.header.stamp            = rclcpp::Time(nf->_timestamp);
         Tnf_tf.header.frame_id         = "world";
         Tnf_tf.child_frame_id          = "slam";
         Tnf_tf.transform.translation.x = tnf.x();
@@ -138,6 +122,25 @@ class RosVisualizer : public rclcpp::Node {
         // publish messages
         _pub_slam->publish(Twf_msg);
     }
+
+    void publishPositionInECEF(std::shared_ptr<NavFrame> nf) {
+
+        geometry_msgs::msg::PointStamped ecef_msg;
+        ecef_msg.header.stamp    = rclcpp::Time(nf->_timestamp);
+        ecef_msg.header.frame_id = "world";
+
+        // Deal with position
+        Eigen::Vector3d ecef = _pipe->enuToECEF(nf->_T_n_f.translation());
+        geometry_msgs::msg::Point p;
+        p.x                   = ecef(0);
+        p.y                   = ecef(1);
+        p.z                   = ecef(2);
+        ecef_msg.point        = p;
+
+        // publish messages
+        _pub_ecef->publish(ecef_msg);
+    }
+
 
     void publishMap(std::shared_ptr<Pipeline> &pipe) {
 
@@ -187,19 +190,59 @@ class RosVisualizer : public rclcpp::Node {
         _pub_traj_vo->publish(_traj_vo_msg);
     }
 
-    void publishGNSS(std::shared_ptr<Pipeline> &pipe) {
+    void publishGNSSinLocalNavigationFrame(std::shared_ptr<NavFrame> nf) {
         
+
+        geometry_msgs::msg::PointStamped enu_msg;
+        enu_msg.header.stamp    = rclcpp::Time(nf->_timestamp);
+        enu_msg.header.frame_id = "world";
+
+        // Deal with position
+        Eigen::Vector3d enu = _pipe->ecefToENU(_pipe->llhToEcef(nf->_gnss->_meas->llh_meas));
+        geometry_msgs::msg::Point p;
+        p.x                   = enu(0);
+        p.y                   = enu(1);
+        p.z                   = enu(2);
+        enu_msg.point        = p;
+        
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "world";
+        marker.header.stamp = rclcpp::Time(nf->_timestamp);
+        marker.type = visualization_msgs::msg::Marker::SPHERE_LIST;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        double scale_factor = 1; // 0.8
+        marker.scale.x = scale_factor*sqrt(nf->_gnss->_meas->cov(0));
+        marker.scale.y = scale_factor*sqrt(nf->_gnss->_meas->cov(1));
+        marker.scale.z = scale_factor*sqrt(nf->_gnss->_meas->cov(2));
+        // marker.color.a = 1.0; // no transparence!
+        marker.color.a = 0.5; // no transparence!
+        if (nf->_gnss->isUsable()) {
+            marker.color.r = 0.0;
+            marker.color.g = 1.0;
+            marker.color.b = 0.1;
+        } else {
+            marker.color.r = 1.0;
+            marker.color.g = 0.0;
+            marker.color.b = 0.1;
+        }
+        marker.points.push_back(enu_msg.point);
+
+        // publish messages
+        _pub_gnss->publish(enu_msg);
+        _pub_gnss_marker->publish(marker);
     }
 
-    void runVisualizer(std::shared_ptr<Pipeline> pipe) {
+    void runVisualizer() {
 
+        std::shared_ptr<NavFrame> nf_to_pub;
         while (true) {
-
-            if (!pipe->_nav_frames.empty()) {
-                publishPose(pipe->_T_n_f);
-                publishECEF(pipe->enuToECEF(pipe->_T_n_f.translation()));
-                publishFrame(pipe);
-                publishMap(pipe);
+            nf_to_pub = _pipe->getPublishableNF();
+            if (nf_to_pub != nullptr) {
+                publishPoseinLocalNavigationFrame(nf_to_pub);
+                publishPoseinWorldFrame(nf_to_pub);
+                publishPositionInECEF(nf_to_pub);
+                publishGNSSinLocalNavigationFrame(nf_to_pub);
+                publishMap(_pipe);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
@@ -207,9 +250,11 @@ class RosVisualizer : public rclcpp::Node {
 
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr _pub_traj, _pub_traj_vo;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr _pub_pose, _pub_slam;
-    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr _pub_ecef;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr _pub_ecef, _pub_gnss;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr _pub_gnss_marker;
     std::shared_ptr<tf2_ros::TransformBroadcaster> _tf_broadcaster;
     visualization_msgs::msg::Marker _traj_msg, _traj_vo_msg;
+    std::shared_ptr<Pipeline> _pipe;
 };
 
 #endif // ROSVISUALIZER_H

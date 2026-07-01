@@ -65,8 +65,8 @@ int main(int argc, char **argv) {
     pg_thread.detach();
 
     // Launch visualizer thread
-    std::shared_ptr<RosVisualizer> rv = std::make_shared<RosVisualizer>();
-    std::thread rv_thread(&RosVisualizer::runVisualizer, rv, pipe);
+    std::shared_ptr<RosVisualizer> rv = std::make_shared<RosVisualizer>(pipe);
+    std::thread rv_thread(&RosVisualizer::runVisualizer, rv);
     rv_thread.detach();
 
     // Start a thread for providing new measurements to the SLAM

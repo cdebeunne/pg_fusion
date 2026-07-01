@@ -36,14 +36,14 @@ class GnssSensor : public isae::ASensor, public std::enable_shared_from_this<Gns
   protected:
 
     bool checkIsUsable() {
+        if (!_meas) {
+          _is_usable = false;
+        }
         if (_thresh_cov == 0) {
           _is_usable = true; // value was not set
         }
         if (_meas && _meas->cov.norm() < _thresh_cov) {
           _is_usable = true;
-        }
-        if (!_meas) {
-          _is_usable = false;
         }
         return _is_usable;
     }

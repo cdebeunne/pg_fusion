@@ -69,7 +69,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /pg_pose
+        Value: /pg/enu/pose
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: false
@@ -117,7 +117,18 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /pg/slam
+        Value: /pg/ecef/pose
+      Value: true
+    - Class: rviz_default_plugins/PointStamped
+      Color: 128; 128; 0
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /pg/enu/gnss_fix
       Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: true
@@ -130,7 +141,33 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /pg/traj
+        Value: /pg/ecef/traj
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /pg/enu/traj
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /pg/enu/gnss_fix/marker
       Value: true
   Enabled: true
   Global Options:

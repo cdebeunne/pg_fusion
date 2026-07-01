@@ -63,6 +63,24 @@ class Pipeline {
     void init();
     void step();
 
+    void publishLatestNF() {
+      if (!_nav_frames.empty()) {
+        std::lock_guard<std::mutex> lock(mutex_pub);
+        _nf_to_pub.push(_nav_frames.back());
+      }
+    }
+
+    std::shared_ptr<NavFrame> getPublishableNF() {
+      if (!_nf_to_pub.empty()) {
+        std::lock_guard<std::mutex> lock(mutex_pub);
+        std::shared_ptr<NavFrame> nf = _nf_to_pub.front();
+        _nf_to_pub.pop();
+        return nf;
+      } else {
+        return nullptr;
+      }
+    }
+
     std::shared_ptr<isae::SLAMCore> _slam; // VSLAM
     std::shared_ptr<PoseGraph> _pg;        // Pose graph
     bool _is_init;
@@ -75,14 +93,16 @@ class Pipeline {
     uint _window_size;       // Size of the sliding window
     bool _remove_z_estimate; // Remove the z estimate from the GNSS
     Eigen::Vector3d _llh_ref, _ecef_ref;
-    std::queue<std::shared_ptr<NavFrame>> _nf_queue;
-    std::deque<std::shared_ptr<NavFrame>> _nav_frames;
+    std::queue<std::shared_ptr<NavFrame>> _nf_queue;      // Queue of frames waiting to be processed
+    std::deque<std::shared_ptr<NavFrame>> _nav_frames;    // All frames in the current sliding window
+    std::queue<std::shared_ptr<NavFrame>> _nf_to_pub;     // Queue of processed frames waiting to be published / visualized
     std::vector<std::pair<unsigned long long, Eigen::Affine3d>> _removed_frame_poses, _removed_vo_poses;
     std::shared_ptr<NavFrame> _nf;
     std::shared_ptr<PGParameters> _param;
 
   protected:  
     std::filesystem::path profiling_path;
+    std::mutex mutex_pub;
 
   private:
     double __t_offset_gnss_img; // clock offset GNSS to camera [s]

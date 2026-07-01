@@ -69,6 +69,10 @@ class GnssSubscriber : public rclcpp::Node {
         return _gnss_buf.size();
     } 
 
+    /**
+     * Report the timestamp of the next available GNSS measurement
+     * (oldest element if multiple measurements are in the queue)
+     */
     unsigned long long getTimeStamp() {
         std::lock_guard<std::mutex> lock(_gnss_mutex);
         unsigned long long t = 0;
@@ -78,6 +82,10 @@ class GnssSubscriber : public rclcpp::Node {
         return t;
     }
 
+    /**
+     * Retrieve the next GNSS measurement and remove it from the queue.
+     * Returned element is NULL if queue is empty.
+     */
     std::shared_ptr<GNSSMeas> getMeas() {
         std::lock_guard<std::mutex> lock(_gnss_mutex);
         std::shared_ptr<GNSSMeas> meas = nullptr;
@@ -109,6 +117,12 @@ class GnssSubscriber : public rclcpp::Node {
         }
 
         std::cout << "\n[GNSS SUB] GNSS reader SyncProcess thread is terminating!\n";
+    }
+
+    void reportSize() {        
+        std::stringstream  msg;
+        msg << "[PGSS] GNSS queue contains: " << this->size() << " elements" << std::endl;
+        std::cout << msg.str();
     }
 
   protected:

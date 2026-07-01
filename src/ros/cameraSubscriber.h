@@ -63,6 +63,10 @@ class CameraSubscriber : public rclcpp::Node {
             _imgs_buf.at(cam)->pop();
     }
 
+    /**
+     * True if all of the camera buffers are empty.
+     * !emptyAll() ensures that at least one buffer contains elements.
+     */
     bool emptyAll() {        
         std::lock_guard<std::mutex> lock(_img_mutex);
         bool isEmpty = true;
@@ -71,6 +75,11 @@ class CameraSubscriber : public rclcpp::Node {
         }
         return isEmpty;
     }
+
+    /**
+     * True if any of the camera buffers is empty.
+     * !emptyAny() ensures that all buffers contain elements.
+     */
     bool emptyAny() {        
         std::lock_guard<std::mutex> lock(_img_mutex);
         bool isEmpty = false;
@@ -183,6 +192,16 @@ class CameraSubscriber : public rclcpp::Node {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         std::cout << "\n Bag reader SyncProcess thread is terminating!\n";
+    }
+
+    void reportSize() {        
+        std::stringstream  msg;
+        msg << "[PGSS] Camera queue contains: ";
+        for (uint ncam = 0; ncam < _prov->getNCam(); ncam++ ) {
+            msg << " [" << this->size(ncam) << "] ";
+        }
+        msg << " elements" << std::endl;
+        std::cout << msg.str();
     }
 
     std::vector<rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr> _subscriptions;
