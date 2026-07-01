@@ -84,11 +84,11 @@ void Pipeline::init()
     // Set KF if GNSS meas
     std::cout << "[PG-init] Found GNSS NF" << std::endl;
 
-    __t_offset_gnss_img = _nf->_gnss->_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9;
+    // __t_offset_gnss_img = _nf->_gnss->_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9;
     
-    std::cout << "############################################################" << std::endl;                                    
-    std::cout << "[PG-init] GNSS/Camera offset [s]: " << __t_offset_gnss_img << std::endl;
-    std::cout << "############################################################" << std::endl; 
+    // std::cout << "############################################################" << std::endl;                                    
+    // std::cout << "[PG-init] GNSS/Camera offset [s]: " << __t_offset_gnss_img << std::endl;
+    // std::cout << "############################################################" << std::endl; 
 
     _nf->_frame->setKeyFrame();
 
@@ -190,23 +190,23 @@ void Pipeline::step()
         if (_nf->_gnss != nullptr && _nf->_gnss->_meas != nullptr) 
         {
             // check synchronous measurements
-            double time_tol_gnss_s = 0.1; // TODO make configurable
-            if (std::abs(_nf->_gnss->_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9 - __t_offset_gnss_img) > time_tol_gnss_s)
-            {
-                std::cout << "############################################################" << std::endl;                                    
-                std::cout << "[PG-pipeline] Throw IMG/GNSS Sync error: " 
-                        << "(" << (_nf->_gnss->_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9) << ") " 
-                        << "[" << __t_offset_gnss_img << "] " 
-                        << _nf->_gnss->_meas->ts_long << " | " << _nf->_frame->getTimestamp() << std::endl;
-                std::cout << "############################################################" << std::endl;       
+            // double time_tol_gnss_s = 0.1; // TODO make configurable
+            // if (std::abs(_nf->_gnss->_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9 - __t_offset_gnss_img) > time_tol_gnss_s)
+            // {
+            //     std::cout << "############################################################" << std::endl;                                    
+            //     std::cout << "[PG-pipeline] Throw IMG/GNSS Sync error: " 
+            //             << "(" << (_nf->_gnss->_meas->ts_long*1e-9 - _nf->_frame->getTimestamp()*1e-9) << ") " 
+            //             << "[" << __t_offset_gnss_img << "] " 
+            //             << _nf->_gnss->_meas->ts_long << " | " << _nf->_frame->getTimestamp() << std::endl;
+            //     std::cout << "############################################################" << std::endl;       
                 
-                _nf->_gnss->_meas = nullptr;
-            }
-            else
-            {
-                _nf->_frame->setKeyFrame();
-                std::cout << "[PG-pipeline] Found GNSS NF" << std::endl;
-            }
+            //     _nf->_gnss->_meas = nullptr;
+            // }
+            // else
+            // {
+            _nf->_frame->setKeyFrame();
+            std::cout << "[PG-pipeline] Found GNSS NF" << std::endl;
+            // }
         }
 
         // Send frame to the SLAM
@@ -377,6 +377,7 @@ void Pipeline::step()
             std::cout << "[PG-pipeline] Solver failed -- Breakpoint" << std::endl;
             throw std::runtime_error("TERMINATING AFTER SOLVER FAILURE");
         }
+        publishLatestNF();
         profiling();
     }
 }

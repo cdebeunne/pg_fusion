@@ -75,12 +75,14 @@ set(SOURCE
    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/poseGraph.cpp
    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/pipeline.cpp
    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/PGParameters.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/src/core/clockSynchronizer.cpp
 )
 set(HEADERS
    ${HEADERS}
    ${CMAKE_CURRENT_SOURCE_DIR}/include/PGParameters.hpp
    ${CMAKE_CURRENT_SOURCE_DIR}/include/poseGraph.hpp
    ${CMAKE_CURRENT_SOURCE_DIR}/include/pipeline.hpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/include/clockSynchronizer.hpp
    ${CMAKE_CURRENT_SOURCE_DIR}/include/data/navframe.hpp
    ${CMAKE_CURRENT_SOURCE_DIR}/include/sensors/GnssSensor.hpp
 )
