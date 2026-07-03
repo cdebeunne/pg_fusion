@@ -11,29 +11,29 @@
 
 struct RelativePoseFactor
 {
-    Eigen::Affine3d T_a_b;
-    Eigen::MatrixXd inf;
-    std::shared_ptr<NavFrame> nf_a;
-    std::shared_ptr<NavFrame> nf_b;
+    Eigen::Affine3d T_a_b;              // Relative pose between frames A and B as homogeneous matrix
+    Eigen::MatrixXd inf;                // Relative pose information matrix
+    std::shared_ptr<NavFrame> nf_a;     // Frame A
+    std::shared_ptr<NavFrame> nf_b;     // Frame B
 };
 
 struct AbsolutePositionFactor
 {
-    Eigen::Vector3d t;
-    Eigen::Matrix3d inf;
-    std::shared_ptr<NavFrame> nf;
+    Eigen::Vector3d t;                  // Absolute translation associated with this frame
+    Eigen::Matrix3d inf;                // Translation information matrix
+    std::shared_ptr<NavFrame> nf;       // This frame
 };
 
 struct AbsolutePoseFactor
 {
-    Eigen::Affine3d T;
-    Eigen::MatrixXd inf;
-    std::shared_ptr<NavFrame> nf;
+    Eigen::Affine3d T;                  // Absolute pose associated with this frame
+    Eigen::MatrixXd inf;                // Pose information matrix
+    std::shared_ptr<NavFrame> nf;       // This frame
 };
 
 struct MarginalizationFactor
 {
-    Eigen::MatrixXd J;
+    Eigen::MatrixXd J;                  // Marginalization Jacobian Jp
     Eigen::VectorXd r;
     std::unordered_map<std::shared_ptr<NavFrame>, int> nf_idx_map;
 };
@@ -336,6 +336,13 @@ public:
         // Compute the residual
         Eigen::Map<Eigen::VectorXd>(residuals, n) = _r + _J * dx;
 
+        // std::stringstream msg;
+        // msg << "-- Prior Evaluate --" << std::endl;
+        // msg << "-- r --" << std::endl;
+        // msg << _r << std::endl;
+        // msg << "-- dx --" << std::endl;
+        // msg << dx << std::endl;
+        // std::cout << msg.str();
         // Fill the jacobians
         if (jacobians)
         {

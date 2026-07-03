@@ -169,9 +169,22 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /pg/enu/gnss_fix/marker
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /pg/enu/gnss_fix/list
+      Value: true
   Enabled: true
   Global Options:
-    Background Color: 211; 215; 207
+    Background Color: 10; 10; 10
     Fixed Frame: world
     Frame Rate: 30
   Name: root

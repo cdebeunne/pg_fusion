@@ -14,6 +14,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <thread>
 #include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include "data/navframe.hpp"
 #include "pipeline.hpp"
@@ -32,6 +33,7 @@ class RosVisualizer : public rclcpp::Node {
         _pub_ecef       = this->create_publisher<geometry_msgs::msg::PointStamped>("pg/ecef/position", 1000);
         _pub_gnss       = this->create_publisher<geometry_msgs::msg::PointStamped>("pg/enu/gnss_fix", 1000);
         _pub_gnss_marker = this->create_publisher<visualization_msgs::msg::Marker>("pg/enu/gnss_fix/marker", 1000);
+        _pub_gnss_list  = this->create_publisher<visualization_msgs::msg::MarkerArray>("pg/enu/gnss_fix/list", 1000);
         _tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
         _traj_msg.type    = visualization_msgs::msg::Marker::LINE_STRIP;
@@ -227,9 +229,23 @@ class RosVisualizer : public rclcpp::Node {
         }
         marker.points.push_back(enu_msg.point);
 
+        // show a list of gnss points
+        _gnss_history.push_back(marker);
+        if (_gnss_history.size() > _pipe->_param->_pipe.window_size)
+            _gnss_history.pop_front();        
+        // marker.color.a = 1.0; // no transparence!
+        visualization_msgs::msg::MarkerArray marker_gnss_history;
+        for (auto mrk : _gnss_history) {
+            mrk.id = mrk.header.stamp.sec + mrk.header.stamp.nanosec;
+            mrk.color.a = 0.2;
+
+            marker_gnss_history.markers.push_back(mrk);
+        }
+
         // publish messages
         _pub_gnss->publish(enu_msg);
         _pub_gnss_marker->publish(marker);
+        _pub_gnss_list->publish(marker_gnss_history);
     }
 
     void runVisualizer() {
@@ -252,6 +268,8 @@ class RosVisualizer : public rclcpp::Node {
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr _pub_pose, _pub_slam;
     rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr _pub_ecef, _pub_gnss;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr _pub_gnss_marker;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr _pub_gnss_list;
+    std::deque<visualization_msgs::msg::Marker> _gnss_history;
     std::shared_ptr<tf2_ros::TransformBroadcaster> _tf_broadcaster;
     visualization_msgs::msg::Marker _traj_msg, _traj_vo_msg;
     std::shared_ptr<Pipeline> _pipe;

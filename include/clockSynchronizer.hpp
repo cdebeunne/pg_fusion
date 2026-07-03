@@ -63,8 +63,8 @@ class ClockSynchronizer {
     bool update(clock_pair_t meas) {
         // _H(0,1) = t1;
         bool isOutlier = testTimePair(meas);
-        std::cout << "Clock KF: " << _state.transpose() << std::endl;
-        std::cout << "Clock KF: " << _P << std::endl;
+        // std::cout << "Clock KF: " << _state.transpose() << std::endl;
+        // std::cout << "Clock KF: " << _P << std::endl;
         profiling();
         if (!isOutlier && _S > 1e-12) {
             Eigen::Vector2d K = _P * _H.transpose() / _S;
@@ -82,18 +82,18 @@ class ClockSynchronizer {
     bool testTimePair(clock_pair_t &meas)
     {
             unsigned long long int t1_nanos = meas.first;
-            std::cout << "Clock KF: t1 " << t1_nanos << std::endl; 
+            // std::cout << "Clock KF: t1 " << t1_nanos << std::endl; 
             unsigned long long int t2_nanos = meas.second;
-            std::cout << "Clock KF: t2 " << t2_nanos << std::endl; 
+            // std::cout << "Clock KF: t2 " << t2_nanos << std::endl; 
             unsigned long long int pred_t2_nanos = asT2(t1_nanos);
-            std::cout << "Clock KF: t2*" << pred_t2_nanos << std::endl;  
+            // std::cout << "Clock KF: t2*" << pred_t2_nanos << std::endl;  
             _S = _H * _P * _H.transpose() + _R;
             if (t2_nanos > pred_t2_nanos)
                 _innovation_s = (1e-9) * (double) (t2_nanos - pred_t2_nanos);
             else   
                 _innovation_s = (1e-9) *(-1)* (double) (pred_t2_nanos - t2_nanos);
-            std::cout << "Clock KF: innovation (s) " << _innovation_s << std::endl;
-            std::cout << "Clock KF: innov. std (s) " << sqrt(_S) << std::endl;
+            // std::cout << "Clock KF: innovation (s) " << _innovation_s << std::endl;
+            // std::cout << "Clock KF: innov. std (s) " << sqrt(_S) << std::endl;
 
             // test
             if (abs(_innovation_s) > (4 * sqrt(_S)))
@@ -107,15 +107,15 @@ class ClockSynchronizer {
         // double drift = _state(1);
         // unsigned long long int t2 = drift * (offset + t1);
         // _H(0,1) = t1;
-        std::cout << "Clock KF:_t1 " << _t1_nanos << std::endl;
-        std::cout << "Clock KF: t1 " << t1_nanos << std::endl; 
+        // std::cout << "Clock KF:_t1 " << _t1_nanos << std::endl;
+        // std::cout << "Clock KF: t1 " << t1_nanos << std::endl; 
         double dt_s = (1e-9) * (double) (t1_nanos - _t1_nanos);
-        std::cout << "Clock KF: dt " << dt_s << std::endl; 
+        // std::cout << "Clock KF: dt " << dt_s << std::endl; 
         _F(0,1) = dt_s;
         unsigned long long int offset_nanos = (unsigned long long int) ((1e9) *_H * _F * _state);
-        std::cout << "Clock KF: offset " << offset_nanos << std::endl;
+        // std::cout << "Clock KF: offset " << offset_nanos << std::endl;
         unsigned long long int t2_nanos = offset_nanos + t1_nanos;
-        std::cout << "Clock KF: t2*" << t2_nanos << std::endl;
+        // std::cout << "Clock KF: t2*" << t2_nanos << std::endl;
         return t2_nanos;
     }
 

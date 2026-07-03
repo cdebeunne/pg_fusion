@@ -36,7 +36,7 @@ class NavFrame {
         {            
             if ((_timestamp - gnss->_meas->ts_long) > 1e9)
             {
-                std::cout << "Offset Frame -> GNSS" << (_timestamp - gnss->_meas->ts_long) << std::endl;
+                // std::cout << "Offset Frame -> GNSS" << (_timestamp - gnss->_meas->ts_long) << std::endl;
                 // throw std::runtime_error("Time offset too large (1)");
             }
         }
@@ -44,7 +44,7 @@ class NavFrame {
         {            
             if ((gnss->_meas->ts_long - _timestamp) > 1e9)
             {
-                std::cout << "Offset Frame -> GNSS" << (_timestamp - gnss->_meas->ts_long) << std::endl;
+                // std::cout << "Offset Frame -> GNSS" << (_timestamp - gnss->_meas->ts_long) << std::endl;
                 // throw std::runtime_error("Time offset too large (2)");
             }
         }
@@ -56,11 +56,13 @@ class NavFrame {
     // TODO add unique _ID
     // TODO add counter
     // Maybe inherit from Frame?
-    std::shared_ptr<isae::Frame> _frame;
-    std::shared_ptr<GnssSensor> _gnss;
-    Eigen::Affine3d _T_n_f, _T_w_f, _T_n_w;
-    bool _is_aligned;
-    unsigned long long _timestamp;
+    std::shared_ptr<isae::Frame> _frame;    //!< VIO Frame containing images, IMU
+    std::shared_ptr<GnssSensor> _gnss;      //!< GNSS measurement associated with this frame
+    Eigen::Affine3d _T_n_f;     //!<  Current pose in local (ENU) frame
+    Eigen::Affine3d _T_w_f;     //!<  Current pose in world (SLAM) frame
+    Eigen::Affine3d _T_n_w;     //!<  Transformation from world (SLAM) to local (ENU) frame 
+    bool _is_aligned;           //!<  Set to true if _T_n_w has been calibrated
+    unsigned long long _timestamp;          //!< Unique timestamp of frame, generally taken from one of the cameras
 };
 
 #endif // NAVFRAME_H

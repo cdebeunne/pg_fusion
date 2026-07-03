@@ -21,6 +21,7 @@ struct VisionParamStruct {
 struct PipelineParamStruct {
     std::string slam_config_path;
     uint window_size;
+    float alignment_displacement;
 };
 
 /*!

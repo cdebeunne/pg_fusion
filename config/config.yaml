@@ -1,9 +1,12 @@
-slam_config_path: "/home/mvonarnim/colcon_ws/src/SaDVIO/ros/config"
-gnss_topic: "/ublox/fix" #"/ublox_driver/receiver_lla"
+slam_config_path: "/root/sadvio_ws/src/SaDVIO/ros/config" # "/home/mvonarnim/colcon_ws/src/SaDVIO/ros/config"
+gnss_topic: "/est/fix/context" # "/ublox/fix" #"/ublox_driver/receiver_lla"
 
-thresh_cov: 60
 window_size: 200
+alignment_displacement : 6
+
+thresh_cov: 20
 remove_z_estimate: True
+
 T_a_f: [1., 0., 0., -0.1,
   0., 1., 0., 0.,
   0., 0., 1., 0.1,

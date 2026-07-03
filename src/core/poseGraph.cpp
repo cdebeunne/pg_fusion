@@ -232,12 +232,20 @@ void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf)
     {
         std::vector<double *> parameter_blocks;
         std::vector<int> parameter_idx;
+
+        // std::stringstream msg;
+        // msg << "Found prior: " << std::endl;
+
         for (auto &nf_prior : _prior->nf_idx_map)
         {
 
             parameter_idx.push_back(nf_idx_map.at(nf_prior.first));
             parameter_blocks.push_back(nf_pose_map.at(nf_prior.first).values());
+            // msg << nf_prior.first->_T_n_f.matrix() << std::endl;
         }
+        // msg << _prior->r << std::endl;
+        // msg << _prior->J << std::endl;
+        // std::cout << msg.str();
         ceres::CostFunction *cost_fct = new MarginalizationPrior(_prior->J, _prior->r, _prior->nf_idx_map);
         marg_sch._marginalization_blocks.push_back(
             std::make_shared<isae::MarginalizationBlockInfo>(cost_fct, parameter_idx, parameter_blocks));
@@ -278,4 +286,7 @@ void PoseGraph::marginalize(std::shared_ptr<NavFrame> nf)
         _prior->r = marg_sch._marginalization_residual;
         _prior->nf_idx_map = nf_idx_map_up;
     }
+    // std::stringstream msg;
+    // msg << "New prior: " << _prior->r << std::endl;
+    // std::cout << msg.str();
 }

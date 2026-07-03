@@ -60,13 +60,13 @@ class SensorSynchronizer : public rclcpp::Node {
             // Case Stereo
             if (_prov->getNCam() == 2) {
                 if (!_cam_sub->emptyAny()) {
-                    reportStereoImageDetection(_msg);
+                    // reportStereoImageDetection(_msg);
 
                     std::shared_ptr<isae::Frame> f;
                     if (checkStereoSync(_msg)) {
                         std::vector<rclcpp::Time> t = _cam_sub->getTimeStamps();
                         _t_cam_curr = t.at(0).nanoseconds();
-                        reportTimestamp(_msg, _t_cam_curr);
+                        // reportTimestamp(_msg, _t_cam_curr);
                         
                         addStereoImageToSensors(_sensors);
 
@@ -79,7 +79,7 @@ class SensorSynchronizer : public rclcpp::Node {
                     if (f) {
                         if (_gnss_sub->empty()) {   // VIO only
                             _nf = std::make_shared<NavFrame>(f);
-                            reportNavFrameCreationStereo(_msg);
+                            // reportNavFrameCreationStereo(_msg);
                         } else {                    // VIO + GNSS
                             std::shared_ptr<GNSSMeas> gnss_meas = _gnss_sub->getMeas();
                             if (gnss_meas) {
@@ -119,15 +119,15 @@ class SensorSynchronizer : public rclcpp::Node {
             // Case Stereo
             if (_prov->getNCam() == 2) {
                 if (!_cam_sub->emptyAny()) {
-                    reportStereoImageDetection(_msg);
-                    _cam_sub->reportSize();
+                    // reportStereoImageDetection(_msg);
+                    // _cam_sub->reportSize();
 
                     if (checkStereoSync(_msg)) {
                         std::vector<rclcpp::Time> t = _cam_sub->getTimeStamps();
                         _t_cam_curr = t.at(0).nanoseconds();
 
-                        reportTimestamp(_msg, _t_cam_curr);
-                        _gnss_sub->reportSize();
+                        // reportTimestamp(_msg, _t_cam_curr);
+                        // _gnss_sub->reportSize();
                         
                         // Check if this measurement can be added to the current frame
                             
@@ -188,7 +188,7 @@ class SensorSynchronizer : public rclcpp::Node {
                                 if (f && !f->getSensors().empty()) {
                                     _nf = std::make_shared<NavFrame>(f);
                                 }
-                                reportNavFrameCreationStereo(_msg);
+                                // reportNavFrameCreationStereo(_msg);
                                 break;
                             }
                             case GVIO:
@@ -348,9 +348,9 @@ class SensorSynchronizer : public rclcpp::Node {
     void reportWaitForGNSS(std::stringstream &msg, double dt)
     {
         std::stringstream().swap(msg);
-        msg << "############################################################" << std::endl;
+        // msg << "############################################################" << std::endl;
         msg << "[PGSS] Waiting ... (stereo | GNSS) " << " (" << dt << " s)"  << std::endl;
-        msg << "############################################################" << std::endl;
+        // msg << "############################################################" << std::endl;
         std::cout << msg.str();
     }
 

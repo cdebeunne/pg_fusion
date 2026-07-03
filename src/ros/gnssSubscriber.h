@@ -104,15 +104,15 @@ class GnssSubscriber : public rclcpp::Node {
         rcl_time_point_value_t t_curr         = 0;
 
         while (true) {
-            if (!_gnss_buf.empty()) {
-                std::cout << "[GNSS SUB] " << "Found GNSS " << " (" << _gnss_buf.size() << " in queue)"  << std::endl;
-                // _gnss_buf.pop();
+            // if (!_gnss_buf.empty()) {
+            //     // std::cout << "[GNSS SUB] " << "Found GNSS " << " (" << _gnss_buf.size() << " in queue)"  << std::endl;
+            //     // _gnss_buf.pop();
                 
-                t_curr = this->now().nanoseconds();
-                std::cout << "[GNSS SUB] Current time: " <<  t_curr << std::endl;
-                std::cout << "[GNSS SUB] " << (t_curr - t_last)*1e-9 << " s elapsed since last GNSS measurement" << std::endl;
-                t_last = t_curr;
-            }
+            //     t_curr = this->now().nanoseconds();
+            //     // std::cout << "[GNSS SUB] Current time: " <<  t_curr << std::endl;
+            //     // std::cout << "[GNSS SUB] " << (t_curr - t_last)*1e-9 << " s elapsed since last GNSS measurement" << std::endl;
+            //     t_last = t_curr;
+            // }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
 

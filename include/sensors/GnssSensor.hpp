@@ -9,6 +9,19 @@ struct gnss_config : isae::sensor_config {
 
 };
 
+enum GNSSCustomService {
+  GNSSSERVICE_NO_CONTEXT   = 128,
+  GNSSSERVICE_HAS_CONTEXT  = 256,
+};
+
+enum ContextLabel {
+  CONTEXT_NONE    = 0,
+  CONTEXT_CANYON  = 1,
+  CONTEXT_OPENSKY = 2,
+  CONTEXT_TREES   = 3,
+  CONTEXT_URBAN   = 4
+};
+
 struct GNSSMeas {
     Eigen::Vector3d llh_meas;
     Eigen::Vector3d cov;
@@ -44,6 +57,9 @@ class GnssSensor : public isae::ASensor, public std::enable_shared_from_this<Gns
         }
         if (_meas && _meas->cov.norm() < _thresh_cov) {
           _is_usable = true;
+        }
+        if (_meas->service == GNSSSERVICE_HAS_CONTEXT && _meas->status == CONTEXT_CANYON) {
+          _is_usable = false;
         }
         return _is_usable;
     }

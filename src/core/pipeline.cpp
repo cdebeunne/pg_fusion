@@ -62,6 +62,8 @@ std::shared_ptr<NavFrame> Pipeline::next()
 void Pipeline::init()
 {
     std::cout << "[PG] Pipeline init" << std::endl;
+    _is_init = false;
+    _is_aligned = false;    
 
     // Init SLAM
     while (!_slam->_is_init)
@@ -75,7 +77,7 @@ void Pipeline::init()
     _nf = next();
     while (_nf->_gnss == nullptr || _nf->_gnss->_meas == nullptr)
     {
-        std::cout << "[PG-init] Found Stereo NF" << std::endl;
+        // std::cout << "[PG-init] Found Stereo NF" << std::endl;
         
         // send the image-only frame to the SLAM
         _slam->_slam_param->getDataProvider()->addFrameToTheQueue(_nf->_frame);
@@ -147,20 +149,11 @@ void Pipeline::init()
     std::cout << "[PG-init] Emplace first NF ..." << std::endl;
     // Add to the nav frame vector
     _nav_frames.push_back(_nf);
+    _nf_init = _nf;
 
     // Calibrate the orientation
     std::cout << "[PG-init] Calibrate ..." << std::endl;
-
     // Add frames until a reasonable displacement is performed
-    while (_nf->_T_n_f.translation().norm() < 3)
-    {
-        step();
-    }
-
-    // Then compute the yaw between ENU and W
-    // and update the poses
-    calibrateRotation4DoF();
-
     profiling();
 
     std::cout << "[PG-init] PoseGraphFusion initialized!" << std::endl;
@@ -205,7 +198,7 @@ void Pipeline::step()
             // else
             // {
             _nf->_frame->setKeyFrame();
-            std::cout << "[PG-pipeline] Found GNSS NF" << std::endl;
+            // std::cout << "[PG-pipeline] Found GNSS NF" << std::endl;
             // }
         }
 
@@ -256,7 +249,7 @@ void Pipeline::step()
     {
 
         // Use the pose of the GNSS when not initialized or VSLAM is not initialized
-        if (!_is_init || !_slam->_is_init)
+        if (!_is_init || !_is_aligned || !_slam->_is_init)
         {
             _nf->_T_n_f = T_n_f;
         }
@@ -295,18 +288,18 @@ void Pipeline::step()
         std::cout << "[PG-pipeline] GPS not used. Cov.: " << _nf->_gnss->_meas->cov.norm() << std::endl;
     }
 
+    RelativePoseFactor rf;
     // add relative pose constraints if the VIO is initialized
     if (_slam->_is_init)
     {
 
         // If the system is init and the SLAM is init the frame is aligned
-        if (_is_init)
+        if (_is_init && _is_aligned)
         {
             _nf->_is_aligned = true;
             _nf->_T_n_w = _T_n_w;
         }
 
-        RelativePoseFactor rf;
         rf.nf_a = _nav_frames.back();
         rf.nf_b = _nf;
         rf.T_a_b = _nav_frames.back()->_T_w_f.inverse() * _nf->_T_w_f;
@@ -338,6 +331,18 @@ void Pipeline::step()
         } 
         else
         {
+            // construct an artificial relative factor
+            // (zero velocity motion model)
+            // TODO can probably be improved a lot
+            rf.nf_a = _nav_frames.back();
+            rf.nf_b = _nf;
+            rf.T_a_b = Eigen::Affine3d::Identity();
+            const double inf_rot    = 1;
+            const double inf_trans  = 100;
+            Eigen::Vector4d inf_sqrt;
+            inf_sqrt << inf_rot, inf_rot, inf_rot, inf_trans;
+            rf.inf = inf_sqrt.diagonal().asDiagonal();
+
             std::cout << "[PG-pipeline] SLAM could not compute relative pose factor!" << std::endl;
             std::cout << "[PG-pipeline] rf" << std::endl;
             std::cout << rf.T_a_b.matrix() << std::endl;
@@ -347,7 +352,22 @@ void Pipeline::step()
     else // If the slam is not init, the system needs to re align
     {
         std::cout << "SLAM is not initialized." << std::endl;
-        _is_init = false;
+
+        // construct an artificial relative factor
+        // (zero velocity motion model)
+        // TODO can probably be improved a lot
+        rf.nf_a = _nav_frames.back();
+        rf.nf_b = _nf;
+        rf.T_a_b = Eigen::Affine3d::Identity();
+        const double inf_rot    = 1;
+        const double inf_trans  = 100;
+        Eigen::Vector4d inf_sqrt;
+        inf_sqrt << inf_rot, inf_rot, inf_rot, inf_trans;
+        rf.inf = inf_sqrt.diagonal().asDiagonal();
+
+        if (_is_init && _is_aligned)
+            _nf_init = _nf;
+        _is_aligned = false;
         _nf->_is_aligned = false;
     }
 
@@ -355,22 +375,33 @@ void Pipeline::step()
     _nav_frames.push_back(_nf);
 
     // Sliding window
-    if (_pg->_nf_absfact_map.size() > _param->_pipe.window_size)
+    // if (_pg->_nf_absfact_map.size() > _param->_pipe.window_size)
+    // {
+    //     // Marginalize
+    //     // std::cout << "[PG-pipeline] Marginalizing PG ..." << std::endl;
+    //     _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
+    //     _removed_vo_poses.push_back(
+    //         {_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_w * _nav_frames.front()->_T_w_f});
+    //     _pg->marginalize(_nav_frames.front());
+    //     _nav_frames.pop_front();
+    //     // std::cout << "[PG-pipeline] PG Marginalized!" << std::endl;
+    // }
+
+    // Add frames until a reasonable displacement is performed
+    if (_is_init && !_is_aligned &&
+        ((_nf_init->_T_n_f.translation() - _nf->_T_n_f.translation()).norm() > _param->_pipe.alignment_displacement))
     {
-        // Marginalize
-        std::cout << "[PG-pipeline] Marginalizing PG ..." << std::endl;
-        _removed_frame_poses.push_back({_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_f});
-        _removed_vo_poses.push_back(
-            {_nav_frames.front()->_timestamp, _nav_frames.front()->_T_n_w * _nav_frames.front()->_T_w_f});
-        _pg->marginalize(_nav_frames.front());
-        _nav_frames.pop_front();
-        std::cout << "[PG-pipeline] PG Marginalized!" << std::endl;
+        // Calibrate the orientation
+        std::cout << "[PG-init] Calibrate ..." << std::endl;
+        // Then compute the yaw between ENU and W
+        // and update the poses
+        calibrateRotation4DoF();
     }
 
     // Solve pg
-    if (_is_init)
+    if (_is_init && _is_aligned)
     {
-        std::cout << "[PG-pipeline] Solving PG ..." << std::endl;        
+        // std::cout << "[PG-pipeline] Solving PG ..." << std::endl;        
         updateRelativeFactors();
         if (!_pg->solveGraph())
         {
@@ -515,6 +546,8 @@ void Pipeline::calibrateRotation4DoF()
 
     std::cout << "Theta: " << theta[0] << std::endl;
     std::cout << "dt: " << dt.getPose().translation().transpose() << std::endl;
+
+    _is_aligned = true;
 }
 
 void Pipeline::updateRelativeFactors()

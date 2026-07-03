@@ -63,6 +63,8 @@ class Pipeline {
     void init();
     void step();
 
+    // bool rfConsistencyCheck();
+
     void publishLatestNF() {
       if (!_nav_frames.empty()) {
         std::lock_guard<std::mutex> lock(mutex_pub);
@@ -83,7 +85,7 @@ class Pipeline {
 
     std::shared_ptr<isae::SLAMCore> _slam; // VSLAM
     std::shared_ptr<PoseGraph> _pg;        // Pose graph
-    bool _is_init;
+    bool _is_init, _is_aligned;
     double _a, _f, _e2;      // Ellipsoid parameters for Earth coordinates
     Eigen::Affine3d _T_n_f;  // Current pose in local ENU frame
     Eigen::Matrix3d _R_n_e;  // Rotation between ENU and ECEF
@@ -97,7 +99,7 @@ class Pipeline {
     std::deque<std::shared_ptr<NavFrame>> _nav_frames;    // All frames in the current sliding window
     std::queue<std::shared_ptr<NavFrame>> _nf_to_pub;     // Queue of processed frames waiting to be published / visualized
     std::vector<std::pair<unsigned long long, Eigen::Affine3d>> _removed_frame_poses, _removed_vo_poses;
-    std::shared_ptr<NavFrame> _nf;
+    std::shared_ptr<NavFrame> _nf, _nf_init;
     std::shared_ptr<PGParameters> _param;
 
   protected:  
